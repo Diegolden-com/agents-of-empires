@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/GameController.sol";
-import "@evvm/testnet-contracts/interfaces/IEvvm.sol";
+import "../src/GameVRFConsumer.sol";
 
 contract MockVRF {
     function requestRandomWords(uint256 /*gameId*/, bool /*enableNativePayment*/) external pure returns (uint256) {
@@ -12,103 +12,185 @@ contract MockVRF {
 }
 
 contract EVVMIntegrationTest is Test {
-
     GameController public game;
     MockVRF public vrf;
+    address public bettor;
 
     function setUp() public {
         vrf = new MockVRF();
         game = new GameController(address(vrf));
+        bettor = address(0x1234);
+        vm.deal(bettor, 10 ether);
     }
 
     function testInitialState() public {
         assertEq(game.owner(), address(this));
+        assertEq(game.gameCounter(), 0);
     }
 
-    function testEVVMImport() public {
-        // This test mainly verifies that the EVVM interfaces are correctly imported and available.
-        // In a real scenario, we would mock the EVVM contract calling the GameController.
-        assertTrue(address(game) != address(0));
+    function testStartGame() public {
+        vm.startPrank(bettor);
+        uint256 gameId = game.startGame{value: game.MIN_DEPOSIT()}(2); // Bet on AI player 2
+        vm.stopPrank();
+        
+        assertEq(gameId, 1, "First game should have ID 1");
+        assertEq(game.gameCounter(), 1, "Game counter should be 1");
+        
+        GameController.Game memory g = game.getGame(gameId);
+        assertEq(g.bettor, bettor, "Bettor should be set correctly");
+        assertEq(g.deposit, game.MIN_DEPOSIT(), "Deposit should match");
+        assertEq(g.bettorChoice, 2, "Bettor choice should be 2");
+        assertEq(uint8(g.status), uint8(GameController.GameStatus.PENDING_RANDOMNESS), "Status should be PENDING_RANDOMNESS");
+        assertEq(g.randomReady, false, "Random should not be ready yet");
     }
 
-    function testStartGameSigned() public {
-        // 1. Create a random signer (Agent)
-        uint256 privateKey = 0xA11CE;
-        address agent = vm.addr(privateKey);
-        vm.deal(agent, 1 ether); // Give agent some ETH if needed (though fisher pays gas)
-        
-        // 2. Construct the message: "{EVVM_ID},startGame,{useNativePayment}"
-        // EVVM_ID is "1" in GameController
-        string memory message = "1,startGame,false";
-        
-        // 3. Sign the message (EIP-191)
-        bytes32 messageHash = keccak256(
-            abi.encodePacked(
-                "\x19Ethereum Signed Message:\n",
-                Strings.toString(bytes(message).length),
-                message
-            )
-        );
-        
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, messageHash);
-        bytes memory signature = abi.encodePacked(r, s, v);
-        
-        // 4. Call startGameSigned as a "Fisher" (this contract)
-        // We need to send enough ETH for the deposit
-        uint256 deposit = game.MIN_DEPOSIT();
-        game.startGameSigned{value: deposit}(false, signature);
-        
-        // 5. Verify the game was created for the Agent
-        // gameId starts at 1
-        GameController.Game memory g = game.getGame(1);
-        assertEq(g.player, agent, "Player should be the signer (agent), not the caller");
-        assertEq(g.deposit, deposit, "Deposit should match");
+    function testStartGameInsufficientDeposit() public {
+        vm.prank(bettor);
+        vm.expectRevert("NOT_ENOUGH_ETH");
+        game.startGame{value: 0.00001 ether}(0);
     }
 
-    function testFullGameLoopSigned() public {
-        // 1. Setup Agent
-        uint256 privateKey = 0xB0B;
-        address agent = vm.addr(privateKey);
-        vm.deal(agent, 1 ether);
-
-        // 2. Start Game
-        bytes memory sigStart = _sign(privateKey, "1,startGame,false");
-        game.startGameSigned{value: game.MIN_DEPOSIT()}(false, sigStart);
-        
-        uint256 gameId = 1;
-
-        // 3. Roll Dice
-        bytes memory sigRoll = _sign(privateKey, "1,rollDice,1");
-        game.rollDiceSigned(gameId, sigRoll);
-
-        // 4. Place Settlement at location 10
-        bytes memory sigSettlement = _sign(privateKey, "1,placeSettlement,1,10");
-        game.placeSettlementSigned(gameId, 10, sigSettlement);
-
-        // 5. Build Road at location 20
-        bytes memory sigRoad = _sign(privateKey, "1,buildRoad,1,20");
-        game.buildRoadSigned(gameId, 20, sigRoad);
-
-        // 6. End Turn
-        bytes memory sigEnd = _sign(privateKey, "1,endTurn,1");
-        game.endTurnSigned(gameId, sigEnd);
-
-        // Verify State
-        GameController.PlayerState memory state = game.getPlayerState(gameId, agent);
-        assertEq(state.settlements, 1, "Should have 1 settlement");
-        assertEq(state.roads, 1, "Should have 1 road");
+    function testStartGameInvalidBettorChoice() public {
+        vm.startPrank(bettor);
+        vm.expectRevert("INVALID_BETTOR_CHOICE");
+        game.startGame{value: 0.0001 ether}(4); // Invalid choice (only 0-3 allowed)
+        vm.stopPrank();
     }
 
-    function _sign(uint256 privateKey, string memory message) internal returns (bytes memory) {
-        bytes32 messageHash = keccak256(
-            abi.encodePacked(
-                "\x19Ethereum Signed Message:\n",
-                Strings.toString(bytes(message).length),
-                message
-            )
-        );
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, messageHash);
-        return abi.encodePacked(r, s, v);
+    function testReceiveRandomWords() public {
+        // Start a game first
+        vm.prank(bettor);
+        uint256 gameId = game.startGame{value: game.MIN_DEPOSIT()}(1);
+        
+        // Prepare random words (need at least 7)
+        uint256[] memory randomWords = new uint256[](7);
+        randomWords[0] = 2; // Exclude company 2 (OPENAI)
+        randomWords[1] = 1; // Model selection for player 0
+        randomWords[2] = 0; // Model selection for player 1
+        randomWords[3] = 1; // Model selection for player 2
+        randomWords[4] = 0; // Model selection for player 3
+        randomWords[5] = 42; // Play order seed
+        randomWords[6] = 123; // Board generation seed
+        
+        // Call receiveRandomWords as VRF
+        vm.prank(address(vrf));
+        game.receiveRandomWords(gameId, 12345, randomWords);
+        
+        // Verify game state
+        GameController.Game memory g = game.getGame(gameId);
+        assertEq(g.randomReady, true, "Random should be ready");
+        assertEq(uint8(g.status), uint8(GameController.GameStatus.ACTIVE), "Status should be ACTIVE");
+        
+        // Verify AI players were assigned
+        GameController.AIPlayer[4] memory players = game.getAIPlayers(gameId);
+        for (uint8 i = 0; i < 4; i++) {
+            assertTrue(players[i].playOrder >= 1 && players[i].playOrder <= 4, "Play order should be 1-4");
+        }
+        
+        // Verify board was generated
+        GameController.Hexagon[19] memory board = game.getBoard(gameId);
+        // Count resources to verify proper distribution
+        uint256 woodCount = 0;
+        uint256 sheepCount = 0;
+        uint256 wheatCount = 0;
+        uint256 brickCount = 0;
+        uint256 oreCount = 0;
+        uint256 desertCount = 0;
+        
+        for (uint8 i = 0; i < 19; i++) {
+            if (board[i].resource == GameController.Resource.WOOD) woodCount++;
+            else if (board[i].resource == GameController.Resource.SHEEP) sheepCount++;
+            else if (board[i].resource == GameController.Resource.WHEAT) wheatCount++;
+            else if (board[i].resource == GameController.Resource.BRICK) brickCount++;
+            else if (board[i].resource == GameController.Resource.ORE) oreCount++;
+            else if (board[i].resource == GameController.Resource.DESERT) desertCount++;
+        }
+        
+        assertEq(woodCount, 4, "Should have 4 wood hexagons");
+        assertEq(sheepCount, 4, "Should have 4 sheep hexagons");
+        assertEq(wheatCount, 4, "Should have 4 wheat hexagons");
+        assertEq(brickCount, 3, "Should have 3 brick hexagons");
+        assertEq(oreCount, 3, "Should have 3 ore hexagons");
+        assertEq(desertCount, 1, "Should have 1 desert hexagon");
+    }
+
+    function testEndGame() public {
+        // Start and activate a game
+        vm.prank(bettor);
+        uint256 gameId = game.startGame{value: game.MIN_DEPOSIT()}(1);
+        
+        uint256[] memory randomWords = new uint256[](7);
+        for (uint8 i = 0; i < 7; i++) {
+            randomWords[i] = i + 1;
+        }
+        
+        vm.prank(address(vrf));
+        game.receiveRandomWords(gameId, 12345, randomWords);
+        
+        // End the game with winner = 2
+        game.endGame(gameId, 2);
+        
+        GameController.Game memory g = game.getGame(gameId);
+        assertEq(uint8(g.status), uint8(GameController.GameStatus.FINISHED), "Status should be FINISHED");
+        assertEq(g.winner, 2, "Winner should be player 2");
+        assertTrue(g.endTime > 0, "End time should be set");
+    }
+
+    function testEndGameOnlyOwnerOrCRE() public {
+        // Start and activate a game
+        vm.prank(bettor);
+        uint256 gameId = game.startGame{value: game.MIN_DEPOSIT()}(1);
+        
+        uint256[] memory randomWords = new uint256[](7);
+        for (uint8 i = 0; i < 7; i++) {
+            randomWords[i] = i + 1;
+        }
+        
+        vm.prank(address(vrf));
+        game.receiveRandomWords(gameId, 12345, randomWords);
+        
+        // Try to end game as non-owner/non-CRE
+        vm.prank(bettor);
+        vm.expectRevert("ONLY_CRE_OR_OWNER");
+        game.endGame(gameId, 1);
+    }
+
+    function testGetAIPlayer() public {
+        // Start and activate a game
+        vm.prank(bettor);
+        uint256 gameId = game.startGame{value: game.MIN_DEPOSIT()}(0);
+        
+        uint256[] memory randomWords = new uint256[](7);
+        randomWords[0] = 1; // Exclude GOOGLE
+        randomWords[1] = 1; // Model for player 0
+        randomWords[2] = 0;
+        randomWords[3] = 1;
+        randomWords[4] = 0;
+        randomWords[5] = 42;
+        randomWords[6] = 123;
+        
+        vm.prank(address(vrf));
+        game.receiveRandomWords(gameId, 12345, randomWords);
+        
+        // Get AI player info
+        (, uint8 modelIndex, uint8 playOrder, string memory modelName) = 
+            game.getAIPlayer(gameId, 0);
+        
+        assertTrue(modelIndex < 10, "Model index should be valid");
+        assertTrue(playOrder >= 1 && playOrder <= 4, "Play order should be 1-4");
+        assertTrue(bytes(modelName).length > 0, "Model name should not be empty");
+    }
+
+    function testSetCREWorkflow() public {
+        address newCRE = address(0x9999);
+        game.setCREWorkflow(newCRE);
+        assertEq(game.creWorkflow(), newCRE, "CRE workflow should be updated");
+    }
+
+    function testSetCREWorkflowOnlyOwner() public {
+        address newCRE = address(0x9999);
+        vm.prank(bettor);
+        vm.expectRevert("NOT_OWNER");
+        game.setCREWorkflow(newCRE);
     }
 }
-import "@openzeppelin/contracts/utils/Strings.sol";
