@@ -64,7 +64,6 @@ contract GameController {
     // ----------------------
     struct Hexagon {
         Resource resource;
-        uint8 diceNumber;    // 2-12 (0 for desert)
     }
 
     // ----------------------
@@ -272,7 +271,6 @@ contract GameController {
     /**
      * @notice Generate randomized Catan board with 19 hexagons
      * Resources: 4 Wood, 4 Sheep, 4 Wheat, 3 Brick, 3 Ore, 1 Desert
-     * Dice: 2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12
      */
     function _generateCatanBoard(uint256 gameId, uint256 seed) internal {
         Game storage g = games[gameId];
@@ -294,34 +292,15 @@ contract GameController {
         // 1 Desert
         resources[idx] = Resource.DESERT;
 
-        // Create dice numbers array (standard Catan distribution)
-        uint8[18] memory diceNumbers = [
-            2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12
-        ];
-
         // Shuffle resources using Fisher-Yates
         for (uint8 i = 18; i > 0; i--) {
-            uint8 j = uint8(uint256(keccak256(abi.encodePacked(seed, "resource", i))) % (i + 1));
+            uint8 j = uint8(uint256(keccak256(abi.encodePacked(seed, i))) % (i + 1));
             (resources[i], resources[j]) = (resources[j], resources[i]);
         }
 
-        // Shuffle dice numbers
-        for (uint8 i = 17; i > 0; i--) {
-            uint8 j = uint8(uint256(keccak256(abi.encodePacked(seed, "dice", i))) % (i + 1));
-            (diceNumbers[i], diceNumbers[j]) = (diceNumbers[j], diceNumbers[i]);
-        }
-
         // Assign to board
-        uint8 diceIdx = 0;
         for (uint8 i = 0; i < TOTAL_HEXAGONS; i++) {
             g.board[i].resource = resources[i];
-
-            // Desert gets no dice number
-            if (resources[i] == Resource.DESERT) {
-                g.board[i].diceNumber = 0;
-            } else {
-                g.board[i].diceNumber = diceNumbers[diceIdx++];
-            }
         }
     }
 
@@ -401,11 +380,10 @@ contract GameController {
     function getHexagon(uint256 gameId, uint8 hexIndex)
         external
         view
-        returns (Resource resource, uint8 diceNumber)
+        returns (Resource resource)
     {
         require(hexIndex < TOTAL_HEXAGONS, "INVALID_HEX_INDEX");
-        Hexagon memory hexagon = games[gameId].board[hexIndex];
-        return (hexagon.resource, hexagon.diceNumber);
+        return games[gameId].board[hexIndex].resource;
     }
 
     function getResourceName(Resource resource) external pure returns (string memory) {
