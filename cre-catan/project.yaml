@@ -17,6 +17,8 @@ staging-settings:
   rpcs:
     - chain-name: ethereum-testnet-sepolia
       url: https://ethereum-sepolia-rpc.publicnode.com
+    - chain-name: base-testnet-sepolia
+      url: https://base-sepolia.g.alchemy.com/v2/T1wvl2_HCv-SDYmqqxnHhcaQwDWSp4IT
 
 # ==========================================================================
 production-settings:
@@ -25,3 +27,5 @@ production-settings:
       url: https://ethereum-sepolia-rpc.publicnode.com
     - chain-name: ethereum-mainnet
       url: https://mainnet.infura.io/v3/<YOUR-PROJECT-ID>
+    - chain-name: base-testnet-sepolia
+      url: https://base-sepolia.g.alchemy.com/v2/T1wvl2_HCv-SDYmqqxnHhcaQwDWSp4IT
