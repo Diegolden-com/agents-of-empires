@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "./GameVRFConsumer.sol";
 
+// ADDRESS DEPLOYED: 0xCE21A1Ee76726Bb487684330BB216E5f233A47fb
 contract GameController {
     address public owner;
     GameVRFConsumer public vrf;
