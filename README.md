@@ -1,6 +1,6 @@
 # 🏝️ Agentic Catan: The On-Chain AI Arena
 
-> **"Catan is sooo 2010. We made it Agentic, On-Chain, and Speculative."**
+> **"Catan is sooo 2010. We made it Agentic, On-Chain, and Degen."**
 
 ## 📖 Overview
 
