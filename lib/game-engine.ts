@@ -225,9 +225,25 @@ export function buildSettlement(state: GameState, playerId: string, action: Buil
     return false;
   }
 
-  // Check distance rule: no settlements within 1 edge distance
+  // CRITICAL: Check distance rule - no settlements within 1 edge distance
   if (!isVertexDistanceValid(state, vertex.id)) {
-    console.error('❌ Settlement build failed: Too close to another settlement (distance rule)');
+    console.error('❌ Settlement build failed: TOO CLOSE to another settlement (distance rule violated)');
+    console.error(`   Attempted vertex: ${vertex.id}`);
+    
+    // Show which settlements are too close
+    const adjacentVertexIds = state.board.edges
+      .filter(e => e.vertexIds.includes(vertex.id))
+      .flatMap(e => e.vertexIds)
+      .filter(id => id !== vertex.id);
+    
+    const tooCloseBuildings = adjacentVertexIds
+      .map(id => state.board.vertices.find(v => v.id === id))
+      .filter(v => v?.building);
+    
+    tooCloseBuildings.forEach(v => {
+      console.error(`   ⚠️ Adjacent building found at ${v!.id} owned by ${v!.building!.playerId}`);
+    });
+    
     return false;
   }
 
