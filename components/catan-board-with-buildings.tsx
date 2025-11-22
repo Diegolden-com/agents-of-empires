@@ -402,6 +402,31 @@ export function CatanBoardWithBuildings({ gameState }: CatanBoardWithBuildingsPr
                   return null;
                 }
                 
+                // Calculate pixel distance for debugging
+                const pixelDistance = Math.sqrt(
+                  Math.pow(v2Pos.x - v1Pos.x, 2) + Math.pow(v2Pos.y - v1Pos.y, 2)
+                );
+                
+                // Parse cubic coordinates for validation
+                const v1Parts = v1Id.split('_');
+                const v2Parts = v2Id.split('_');
+                const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
+                const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
+                const chebyshevDist = Math.max(
+                  Math.abs(v1Coords.q - v2Coords.q),
+                  Math.abs(v1Coords.r - v2Coords.r),
+                  Math.abs(v1Coords.s - v2Coords.s)
+                );
+                
+                if (chebyshevDist !== 1) {
+                  console.error(`🚨 RENDERING INVALID ROAD: ${edge.id}`);
+                  console.error(`   ${v1Id} to ${v2Id}`);
+                  console.error(`   Chebyshev distance: ${chebyshevDist} (should be 1)`);
+                  console.error(`   Pixel distance: ${pixelDistance.toFixed(1)}px`);
+                  console.error(`   v1 pos: (${v1Pos.x.toFixed(1)}, ${v1Pos.y.toFixed(1)})`);
+                  console.error(`   v2 pos: (${v2Pos.x.toFixed(1)}, ${v2Pos.y.toFixed(1)})`);
+                }
+                
                 const player = gameState.players.find((p) => p.id === edge.road!.playerId);
                 
                 return (
