@@ -96,9 +96,13 @@ export function generateBoard(): Board {
 
   // Generate edges (connecting adjacent vertices)
   const edgeMap = new Map<string, Edge>();
+  let edgesAttempted = 0;
+  let edgesRejected = 0;
+  let edgesCreated = 0;
+  let edgesDuplicate = 0;
   
   // For each hex, connect its 6 vertices in order (forming a hexagon)
-  hexes.forEach(hex => {
+  hexes.forEach((hex, hexIndex) => {
     const hexVertices = getHexVertices(hex.position);
     const vertexIds = hexVertices.map(pos => `v_${pos.q}_${pos.r}_${pos.s}`);
     const vertexCoords = hexVertices;
@@ -110,6 +114,8 @@ export function generateBoard(): Board {
       const v1Coords = vertexCoords[i];
       const v2Coords = vertexCoords[(i + 1) % vertexIds.length];
       
+      edgesAttempted++;
+      
       // CRITICAL: Verify vertices are actually adjacent
       // Adjacent vertices on a hex should have Chebyshev distance (max of |dq|, |dr|, |ds|) = 1
       const dq = Math.abs(v1Coords.q - v2Coords.q);
@@ -117,10 +123,12 @@ export function generateBoard(): Board {
       const ds = Math.abs(v1Coords.s - v2Coords.s);
       const chebyshevDistance = Math.max(dq, dr, ds);
       
-      if (chebyshevDistance > 1) {
-        console.error(`⚠️ Skipping invalid edge: vertices ${v1Id} and ${v2Id} are not adjacent (Chebyshev distance=${chebyshevDistance})`);
-        console.error(`   v1: (${v1Coords.q}, ${v1Coords.r}, ${v1Coords.s}), v2: (${v2Coords.q}, ${v2Coords.r}, ${v2Coords.s})`);
+      if (chebyshevDistance !== 1) {
+        console.error(`⚠️ Hex ${hexIndex} (${hex.id}): Rejecting edge ${i}→${(i+1)%6}`);
+        console.error(`   ${v1Id} to ${v2Id}`);
+        console.error(`   Chebyshev distance: ${chebyshevDistance} (must be 1)`);
         console.error(`   Delta: (${dq}, ${dr}, ${ds})`);
+        edgesRejected++;
         continue;
       }
       
@@ -128,18 +136,28 @@ export function generateBoard(): Board {
       const [first, second] = v1Id < v2Id ? [v1Id, v2Id] : [v2Id, v1Id];
       const edgeId = `e_${first}_${second}`;
       
-      if (!edgeMap.has(edgeId)) {
+      if (edgeMap.has(edgeId)) {
+        edgesDuplicate++;
+      } else {
         edgeMap.set(edgeId, {
           id: edgeId,
           vertexIds: [first, second],
         });
+        edgesCreated++;
       }
     }
   });
+  
+  console.log(`   Edge generation stats:`);
+  console.log(`     - Attempted: ${edgesAttempted}`);
+  console.log(`     - Rejected (invalid distance): ${edgesRejected}`);
+  console.log(`     - Created (unique): ${edgesCreated}`);
+  console.log(`     - Duplicates (shared between hexes): ${edgesDuplicate}`);
 
   const edges = Array.from(edgeMap.values());
   
   console.log(`\n🎲 Board generated: ${hexes.length} hexes, ${vertices.length} vertices, ${edges.length} edges`);
+  console.log(`   Expected edges: ${hexes.length * 6} (before deduplication)`);
   
   // VALIDATE: Each edge should connect vertices that are EXACTLY 1 Chebyshev distance apart
   let invalidEdgeCount = 0;
