@@ -101,11 +101,27 @@ export function generateBoard(): Board {
   hexes.forEach(hex => {
     const hexVertices = getHexVertices(hex.position);
     const vertexIds = hexVertices.map(pos => `v_${pos.q}_${pos.r}_${pos.s}`);
+    const vertexCoords = hexVertices;
     
     // Connect each vertex to the next one (and last to first)
     for (let i = 0; i < vertexIds.length; i++) {
       const v1Id = vertexIds[i];
       const v2Id = vertexIds[(i + 1) % vertexIds.length];
+      const v1Coords = vertexCoords[i];
+      const v2Coords = vertexCoords[(i + 1) % vertexIds.length];
+      
+      // CRITICAL: Verify vertices are actually adjacent
+      // In cubic coordinates, adjacent vertices on a hex have Manhattan distance = 2
+      const dq = Math.abs(v1Coords.q - v2Coords.q);
+      const dr = Math.abs(v1Coords.r - v2Coords.r);
+      const ds = Math.abs(v1Coords.s - v2Coords.s);
+      const manhattanDistance = (dq + dr + ds) / 2;
+      
+      if (manhattanDistance > 2) {
+        console.error(`⚠️ Skipping invalid edge: vertices ${v1Id} and ${v2Id} are too far (manhattan distance=${manhattanDistance})`);
+        console.error(`   v1: (${v1Coords.q}, ${v1Coords.r}, ${v1Coords.s}), v2: (${v2Coords.q}, ${v2Coords.r}, ${v2Coords.s})`);
+        continue;
+      }
       
       // Create edge with sorted IDs to avoid duplicates
       const [first, second] = v1Id < v2Id ? [v1Id, v2Id] : [v2Id, v1Id];

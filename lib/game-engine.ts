@@ -128,6 +128,36 @@ export function buildRoad(state: GameState, playerId: string, action: BuildRoadA
     return false;
   }
 
+  // CRITICAL: Validate that the two vertices are actually adjacent
+  const [v1Id, v2Id] = edge.vertexIds;
+  const v1 = state.board.vertices.find(v => v.id === v1Id);
+  const v2 = state.board.vertices.find(v => v.id === v2Id);
+  
+  if (!v1 || !v2) {
+    console.error(`❌ Road build failed: One or both vertices not found (${v1Id}, ${v2Id})`);
+    return false;
+  }
+
+  // Parse cubic coordinates from vertex IDs
+  const v1Parts = v1Id.split('_');
+  const v2Parts = v2Id.split('_');
+  const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
+  const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
+
+  // Calculate cubic distance - adjacent vertices should have Manhattan distance <= 2
+  const dq = Math.abs(v1Coords.q - v2Coords.q);
+  const dr = Math.abs(v1Coords.r - v2Coords.r);
+  const ds = Math.abs(v1Coords.s - v2Coords.s);
+  const manhattanDistance = (dq + dr + ds) / 2;
+
+  if (manhattanDistance > 2) {
+    console.error(`❌ Road build failed: Vertices are not adjacent! Manhattan distance=${manhattanDistance} (max allowed=2)`);
+    console.error(`   ${v1Id} coords: (${v1Coords.q}, ${v1Coords.r}, ${v1Coords.s})`);
+    console.error(`   ${v2Id} coords: (${v2Coords.q}, ${v2Coords.r}, ${v2Coords.s})`);
+    console.error(`   Delta: (${dq}, ${dr}, ${ds})`);
+    return false;
+  }
+
   // In setup phases, road MUST connect to player's LAST settlement
   if (state.phase === 'setup_road_1' || state.phase === 'setup_road_2') {
     const playerSettlements = state.board.vertices.filter(v => 
