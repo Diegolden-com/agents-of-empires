@@ -112,6 +112,26 @@ Las Pull Requests son bienvenidas. Para cambios mayores, por favor abre un issue
 
 Distributed under the MIT License. See `LICENSE` for more information.
 
+## Deployment
+**Admin:** `0x5ee75a1B1648C023e885E58bD3735Ae273f2cc52`  
+**GoldenFisher:** `0x5ee75a1B1648C023e885E58bD3735Ae273f2cc52`  
+**Activator:** `0x5ee75a1B1648C023e885E58bD3735Ae273f2cc52`  
+
+**EvvmName:** `CATANVVM`  
+**PrincipalTokenName:** `Mate token`  
+**PrincipalTokenSymbol:** `MATE`  
+
+**TotalSupply:** `96`  
+**EraTokens:** `32`  
+**Reward:** `1016666666500000000000000000`  
+
+**Staking deployed at:** `0xbbEC0ca584C1d7c0Cbdc355D6e0531b28fF0e2a8`  
+**Evvm deployed at:** `0xae6D696c24e3D074793409bC28b446E0426B0e62`  
+**Estimator deployed at:** `0xC36011153233847cb8f2832825eFd66BA9662146`  
+**NameService deployed at:** `0x75F81a5D17b54126b5601F539Dc9225cEeDc8728`  
+**Treasury deployed at:** `0x52d8cb866b1f39CB50c9aD644D34cCFbA36D69B4`  
+**P2PSwap deployed at:** `0x2F2DD8E5487dBAa1302450aeC92D68f887a0BdA6`
+
 -----
 
 *Built with ❤️ for the future of AI & Crypto.*
