@@ -5,6 +5,7 @@ import { GameState } from '@/lib/types';
 import { CatanBoardWithBuildings } from '@/components/catan-board-with-buildings';
 import { PlayerPanel } from '@/components/player-panel';
 import { GameControls } from '@/components/game-controls';
+import { ResourceLog } from '@/components/resource-log';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -180,6 +181,12 @@ export default function GamePage({ params }: PageProps) {
             )}
           </div>
         </div>
+
+        {/* Resource Log - New detailed view */}
+        <ResourceLog 
+          players={gameState.players}
+          currentPlayerIndex={gameState.currentPlayerIndex}
+        />
 
         {/* Game Over */}
         {gameState.phase === 'game_over' && (
