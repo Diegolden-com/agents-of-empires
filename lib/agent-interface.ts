@@ -159,7 +159,32 @@ export function getGameStateForAgent(state: GameState, playerId: string): any {
           });
         }
         
-        return edges.map(e => ({ id: e.id, vertices: e.vertexIds }));
+        // CRITICAL: Final validation - only return edges with adjacent vertices
+        const validEdges = edges.filter(e => {
+          const [v1Id, v2Id] = e.vertexIds;
+          const v1Parts = v1Id.split('_');
+          const v2Parts = v2Id.split('_');
+          const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
+          const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
+          
+          const chebyshevDist = Math.max(
+            Math.abs(v1Coords.q - v2Coords.q),
+            Math.abs(v1Coords.r - v2Coords.r),
+            Math.abs(v1Coords.s - v2Coords.s)
+          );
+          
+          if (chebyshevDist !== 1) {
+            console.error(`⚠️ Agent Interface: Filtering invalid edge ${e.id} (Chebyshev dist=${chebyshevDist})`);
+            return false;
+          }
+          return true;
+        });
+        
+        if (validEdges.length < edges.length) {
+          console.error(`⚠️ Agent Interface filtered out ${edges.length - validEdges.length} invalid edges`);
+        }
+        
+        return validEdges.map(e => ({ id: e.id, vertices: e.vertexIds }));
       })(),
     },
     possibleActions: getPossibleActions(state, playerId),

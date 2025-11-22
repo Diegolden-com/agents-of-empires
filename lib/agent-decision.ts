@@ -296,8 +296,35 @@ export async function getAgentDecision(
     availableEdgesRaw = connectedEdges.length > 0 ? connectedEdges : availableEdgesRaw;
   }
 
+  // CRITICAL: Validate ALL edges before ranking them
+  console.log(`\n🔍 Validating ${availableEdgesRaw.length} available edges for ${player.name}`);
+  const validEdges = availableEdgesRaw.filter(edge => {
+    const [v1Id, v2Id] = edge.vertexIds;
+    const v1Parts = v1Id.split('_');
+    const v2Parts = v2Id.split('_');
+    const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
+    const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
+    
+    const dq = Math.abs(v1Coords.q - v2Coords.q);
+    const dr = Math.abs(v1Coords.r - v2Coords.r);
+    const ds = Math.abs(v1Coords.s - v2Coords.s);
+    const chebyshevDist = Math.max(dq, dr, ds);
+    
+    if (chebyshevDist !== 1) {
+      console.error(`❌ FILTERING OUT INVALID EDGE: ${edge.id}`);
+      console.error(`   Connects ${v1Id} and ${v2Id}`);
+      console.error(`   Chebyshev distance: ${chebyshevDist} (must be 1)`);
+      return false;
+    }
+    return true;
+  });
+  
+  if (validEdges.length < availableEdgesRaw.length) {
+    console.error(`⚠️ Filtered out ${availableEdgesRaw.length - validEdges.length} invalid edges`);
+  }
+  
   // Rankear y obtener las mejores 5 opciones
-  const rankedEdges = rankEdges(availableEdgesRaw, gameState, playerId, 5);
+  const rankedEdges = rankEdges(validEdges, gameState, playerId, 5);
   const edgeOptionsText = formatEdgeOptions(rankedEdges);
 
   console.log(`🎯 Generated ${rankedEdges.length} edge options for ${player.name}`);
