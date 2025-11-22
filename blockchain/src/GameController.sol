@@ -144,10 +144,9 @@ contract GameController {
     /**
      * @notice Start a new Catan game with 4 AI players
      * @param bettorChoice Which AI player the bettor bets on (0-3)
-     * @param useNativePayment Whether to use native payment for VRF
      * @return gameId The ID of the newly created game
      */
-    function startGame(uint8 bettorChoice, bool useNativePayment)
+    function startGame(uint8 bettorChoice)
         external
         payable
         returns (uint256 gameId)
@@ -158,7 +157,7 @@ contract GameController {
         gameCounter++;
         gameId = gameCounter;
 
-        uint256 requestId = vrf.requestRandomWords(gameId, useNativePayment);
+        uint256 requestId = vrf.requestRandomWords(gameId, true);
 
         // Create game in storage
         Game storage g = games[gameId];
