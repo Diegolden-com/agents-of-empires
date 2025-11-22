@@ -111,15 +111,16 @@ export function generateBoard(): Board {
       const v2Coords = vertexCoords[(i + 1) % vertexIds.length];
       
       // CRITICAL: Verify vertices are actually adjacent
-      // In cubic coordinates, adjacent vertices on a hex have Manhattan distance = 2
+      // Adjacent vertices on a hex should have Chebyshev distance (max of |dq|, |dr|, |ds|) = 1
       const dq = Math.abs(v1Coords.q - v2Coords.q);
       const dr = Math.abs(v1Coords.r - v2Coords.r);
       const ds = Math.abs(v1Coords.s - v2Coords.s);
-      const manhattanDistance = (dq + dr + ds) / 2;
+      const chebyshevDistance = Math.max(dq, dr, ds);
       
-      if (manhattanDistance > 2) {
-        console.error(`⚠️ Skipping invalid edge: vertices ${v1Id} and ${v2Id} are too far (manhattan distance=${manhattanDistance})`);
+      if (chebyshevDistance > 1) {
+        console.error(`⚠️ Skipping invalid edge: vertices ${v1Id} and ${v2Id} are not adjacent (Chebyshev distance=${chebyshevDistance})`);
         console.error(`   v1: (${v1Coords.q}, ${v1Coords.r}, ${v1Coords.s}), v2: (${v2Coords.q}, ${v2Coords.r}, ${v2Coords.s})`);
+        console.error(`   Delta: (${dq}, ${dr}, ${ds})`);
         continue;
       }
       
@@ -138,12 +139,42 @@ export function generateBoard(): Board {
 
   const edges = Array.from(edgeMap.values());
   
-  console.log(`Board generated: ${hexes.length} hexes, ${vertices.length} vertices, ${edges.length} edges`);
+  console.log(`\n🎲 Board generated: ${hexes.length} hexes, ${vertices.length} vertices, ${edges.length} edges`);
+  
+  // VALIDATE: Each edge should connect vertices that are EXACTLY 1 Chebyshev distance apart
+  let invalidEdgeCount = 0;
+  edges.forEach(edge => {
+    const [v1Id, v2Id] = edge.vertexIds;
+    const v1Parts = v1Id.split('_');
+    const v2Parts = v2Id.split('_');
+    const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
+    const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
+    
+    const dq = Math.abs(v1Coords.q - v2Coords.q);
+    const dr = Math.abs(v1Coords.r - v2Coords.r);
+    const ds = Math.abs(v1Coords.s - v2Coords.s);
+    const chebyshevDistance = Math.max(dq, dr, ds);
+    
+    if (chebyshevDistance !== 1) {
+      console.error(`⚠️ INVALID EDGE DETECTED: ${edge.id}`);
+      console.error(`   Connects ${v1Id} and ${v2Id}`);
+      console.error(`   Chebyshev Distance: ${chebyshevDistance} (should be exactly 1)`);
+      console.error(`   Delta: (${dq}, ${dr}, ${ds})`);
+      invalidEdgeCount++;
+    }
+  });
+  
+  if (invalidEdgeCount > 0) {
+    console.error(`❌ Found ${invalidEdgeCount} invalid edges! Board generation has ERRORS.`);
+  } else {
+    console.log(`✅ All ${edges.length} edges are valid (Chebyshev distance = 1)`);
+  }
 
   return { hexes, vertices, edges };
 }
 
 // Get the 6 vertex positions for a hex (in cubic coordinates)
+// Returns vertices in clockwise order starting from top
 function getHexVertices(hexPos: { q: number; r: number; s: number }) {
   // Vertices are at the corners of each hex
   // Using integer offsets to ensure proper matching
@@ -151,13 +182,33 @@ function getHexVertices(hexPos: { q: number; r: number; s: number }) {
   const r = hexPos.r * 2;
   const s = hexPos.s * 2;
   
-  return [
-    { q: q + 1, r: r - 1, s: s },
-    { q: q + 1, r: r, s: s - 1 },
-    { q: q, r: r + 1, s: s - 1 },
-    { q: q - 1, r: r + 1, s: s },
-    { q: q - 1, r: r, s: s + 1 },
-    { q: q, r: r - 1, s: s + 1 },
+  // CRITICAL: These offsets define the 6 corners in clockwise order
+  // Each pair of consecutive vertices should have Manhattan distance = 2
+  const vertices = [
+    { q: q + 1, r: r - 1, s: s },      // 0: Top (NE)
+    { q: q + 1, r: r, s: s - 1 },      // 1: Top-right (E)
+    { q: q, r: r + 1, s: s - 1 },      // 2: Bottom-right (SE)
+    { q: q - 1, r: r + 1, s: s },      // 3: Bottom (SW)
+    { q: q - 1, r: r, s: s + 1 },      // 4: Bottom-left (W)
+    { q: q, r: r - 1, s: s + 1 },      // 5: Top-left (NW)
   ];
+  
+  // VALIDATE: Check that consecutive vertices are exactly 1 Chebyshev unit apart
+  for (let i = 0; i < vertices.length; i++) {
+    const v1 = vertices[i];
+    const v2 = vertices[(i + 1) % vertices.length];
+    const dq = Math.abs(v1.q - v2.q);
+    const dr = Math.abs(v1.r - v2.r);
+    const ds = Math.abs(v1.s - v2.s);
+    const chebyshevDist = Math.max(dq, dr, ds);
+    
+    if (chebyshevDist !== 1) {
+      console.error(`❌ INVALID HEX VERTEX ORDER at hex (${hexPos.q}, ${hexPos.r}, ${hexPos.s})`);
+      console.error(`   Vertex ${i} to ${(i + 1) % 6}: Chebyshev distance = ${chebyshevDist} (should be 1)`);
+      console.error(`   v1: (${v1.q}, ${v1.r}, ${v1.s}), v2: (${v2.q}, ${v2.r}, ${v2.s})`);
+    }
+  }
+  
+  return vertices;
 }
 

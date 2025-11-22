@@ -144,14 +144,14 @@ export function buildRoad(state: GameState, playerId: string, action: BuildRoadA
   const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
   const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
 
-  // Calculate cubic distance - adjacent vertices should have Manhattan distance <= 2
+  // Calculate cubic distance - adjacent vertices should have Chebyshev distance = 1
   const dq = Math.abs(v1Coords.q - v2Coords.q);
   const dr = Math.abs(v1Coords.r - v2Coords.r);
   const ds = Math.abs(v1Coords.s - v2Coords.s);
-  const manhattanDistance = (dq + dr + ds) / 2;
+  const chebyshevDistance = Math.max(dq, dr, ds);
 
-  if (manhattanDistance > 2) {
-    console.error(`❌ Road build failed: Vertices are not adjacent! Manhattan distance=${manhattanDistance} (max allowed=2)`);
+  if (chebyshevDistance !== 1) {
+    console.error(`❌ Road build failed: Vertices are NOT adjacent! Chebyshev distance=${chebyshevDistance} (must be exactly 1)`);
     console.error(`   ${v1Id} coords: (${v1Coords.q}, ${v1Coords.r}, ${v1Coords.s})`);
     console.error(`   ${v2Id} coords: (${v2Coords.q}, ${v2Coords.r}, ${v2Coords.s})`);
     console.error(`   Delta: (${dq}, ${dr}, ${ds})`);
