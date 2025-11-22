@@ -630,76 +630,13 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/agents_of_empires
 
 ---
 
-## 🏆 Bounty Qualifications
-
-### EVVM
-
-✅ **Best MATE Metaprotocol Integration** ($7k)
-- All game logic in EVVM virtual chain
-- GameFactory, GameState, ActionProcessor contracts
-
-✅ **Novel Fisher/Relayer** ($5k)
-- Public API endpoint for batches
-- Custom batching strategy (10 sec intervals)
-- Fisher-compatible transaction format
-
-✅ **Custom Service/EVVM Chain** ($5k)
-- Game-specific virtual blockchain
-- Async nonces for player actions
-- Optimistic execution pattern
-
-✅ **Use MATE Metaprotocol** ($2.5k pool)
-- Meaningful use of EVVM infrastructure
-
-✅ **Feedback** ($500)
-- Detailed feedback form submission
-
----
-
-### Chainlink
-
-✅ **Connect the World** ($6k - 3 teams × $2k)
-- VRF Integration: Critical hits, damage variance, spawns
-- Automation Integration: Game monitoring, automatic payouts
-- State changes triggered by both services
-
-✅ **Best CRE Workflow** (if using Cross-Chain) ($9k)
-- Could expand to cross-chain tournaments (future roadmap)
-
-**Requirements met:**
-- ✅ VRF modifies on-chain state (unit health, game outcomes)
-- ✅ Automation triggers state changes (reward distribution)
-- ✅ Multiple Chainlink services used
-
----
-
-### Coinbase CDP
-
-✅ **Build Great Onchain App** (up to $20k - 4 teams × $5k)
-
-**Multiple CDP products used:**
-1. CDP Embedded Wallets - Email login for players
-2. CDP Server Wallets - AI opponent bots
-3. CDP Trade API (future) - Swap tokens to USDC for entry fees
-4. x402 Protocol (future) - Micropayment entry fees
-
-**Bonus points:**
-- ✅ Uses 2+ CDP products (Embedded + Server Wallets)
-- ✅ Innovative use case (AI bots as on-chain agents)
-- ✅ Will share on X tagging @CoinbaseDev
-- ✅ Will provide detailed feedback
-
-
----
-
 ## 📚 Resources
 
 ### Documentation
 
 - EVVM: https://www.evvm.info/llms-full.txt
 - Chainlink VRF: https://docs.chain.link/vrf
-- Chainlink Automation: https://docs.chain.link/automation
-- Coinbase CDP: https://docs.cdp.coinbase.com/
+- Chainlink CRE: https://docs.chain.link/cre
 - Foundry: https://book.getfoundry.sh/
 
 ### Smart Contracts (Deployed)
