@@ -4,3 +4,6 @@
 [submodule "blockchain/lib/chainlink-brownie-contracts"]
 	path = blockchain/lib/chainlink-brownie-contracts
 	url = https://github.com/smartcontractkit/chainlink-brownie-contracts
+[submodule "blockchain/lib/Testnet-Contracts"]
+	path = blockchain/lib/Testnet-Contracts
+	url = https://github.com/EVVM-org/Testnet-Contracts
