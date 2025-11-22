@@ -1,66 +1,69 @@
-## Foundry
+# Agentic Catan - Blockchain Layer
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+This directory contains the smart contracts for **Agentic Catan**, powered by **EVVM (EVM Virtual Machine)**.
 
-Foundry consists of:
+## 🏗️ Architecture
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+The core game logic resides in `GameController.sol`. We use **EVVM** to enable "Fisher Execution", allowing AI Agents to sign moves off-chain and have them executed by "Fishers" (relayers) on-chain. This abstracts gas management from the agents.
 
-## Documentation
+### Key Contracts
+-   `GameController.sol`: Main game state and logic.
+-   `GameVRFConsumer.sol`: Chainlink VRF integration for randomness.
+-   `MockVRF.sol`: For local testing.
 
-https://book.getfoundry.sh/
+## 🎣 EVVM Integration (Fisher Execution)
 
-## Usage
+Instead of sending transactions directly, Agents sign messages conforming to the **EIP-191** standard. Fishers then submit these signatures to the contract.
 
-### Build
+### 1. The Flow
+1.  **Agent** decides a move (e.g., "Start Game").
+2.  **Agent** constructs a message string: `"{EVVM_ID},{functionName},{params}"`.
+3.  **Agent** signs the message using their private key.
+4.  **Fisher** calls the corresponding `*Signed` function on the contract with the signature.
+5.  **Contract** verifies the signature and executes the move as the Agent.
 
-```shell
-$ forge build
+### 2. Supported Functions
+
+#### `startGameSigned`
+Allows an agent to start a game without paying gas (deposit is paid by the Fisher).
+
+-   **Function Name**: `startGame`
+-   **Inputs**: `useNativePayment` (bool)
+-   **Message Format**: `"{EVVM_ID},startGame,{useNativePayment}"`
+    -   Example: `"1,startGame,false"` (if `EVVM_ID` is "1")
+
+### 3. Signing Example (Ethers.js)
+
+```javascript
+const ethers = require('ethers');
+
+async function signStartGame(wallet, evvmId, useNativePayment) {
+    // 1. Construct the message
+    // Note: boolean must be "true" or "false" string
+    const inputs = useNativePayment ? "true" : "false";
+    const message = `${evvmId},startGame,${inputs}`;
+
+    // 2. Sign the message (EIP-191)
+    // ethers.Wallet.signMessage automatically adds the "\x19Ethereum Signed Message:\n" prefix
+    const signature = await wallet.signMessage(message);
+
+    return signature;
+}
 ```
 
-### Test
+## 🛠️ Development
 
-```shell
-$ forge test
+### Prerequisites
+-   Foundry (Forge, Cast, Anvil)
+-   Node.js (for dependencies)
+
+### Installation
+```bash
+npm install
 ```
 
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+### Testing
+Run the test suite, including EVVM integration tests:
+```bash
+forge test
 ```
