@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Play, Zap, Brain, Shield, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { CatanBoardWithBuildings } from '@/components/catan-board-with-buildings';
+import { ResourceLog } from '@/components/resource-log';
 
 export default function AIBattlePage() {
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
@@ -317,6 +318,14 @@ export default function AIBattlePage() {
                   </Button>
                 </div>
               </div>
+            )}
+
+            {/* Resource Log - Detailed view */}
+            {gameState && (
+              <ResourceLog 
+                players={gameState.players}
+                currentPlayerIndex={gameState.currentPlayerIndex}
+              />
             )}
 
             {!gameId && (

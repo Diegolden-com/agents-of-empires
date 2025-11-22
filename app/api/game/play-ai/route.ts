@@ -162,13 +162,24 @@ export async function POST(req: NextRequest) {
               conversationHistory
             );
           } catch (error) {
-            console.error('Decision error:', error);
+            console.error(`❌ Decision error for ${currentPlayer.name}:`, error);
+            consecutiveFailures++;
             send({ 
               type: 'error', 
-              message: `Error getting decision: ${error}`,
+              message: `Error getting decision from ${currentPlayer.name}: ${error}`,
               playerId: currentPlayer.id,
             });
-            break;
+            
+            // If too many decision errors, skip to next player instead of breaking
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+              console.error(`❌ Too many decision errors, skipping player ${currentPlayer.name}`);
+              consecutiveFailures = 0;
+              gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+              if (gameState.phase === 'main') {
+                gameState.phase = 'dice_roll';
+              }
+            }
+            continue; // Continue instead of break
           }
 
           send({
@@ -271,23 +282,55 @@ export async function POST(req: NextRequest) {
           await new Promise(resolve => setTimeout(resolve, 200));
         }
 
-        if (turnCount >= maxTurns) {
-          // Max turns reached - declare winner by VP
-          const winner = gameState.players.reduce((prev, current) => 
-            current.victoryPoints > prev.victoryPoints ? current : prev
-          );
-          const winnerAgent = agentConfigs[gameState.players.indexOf(winner)];
-          
+        // Game ended without a winner reaching 10 VP
+        const realWinner = gameState.players.find(p => p.victoryPoints >= 10);
+        
+        if (realWinner) {
+          // Someone actually won with 10 VP
+          const winnerAgent = agentConfigs[gameState.players.indexOf(realWinner)];
           send({ 
             type: 'victory', 
             winner: {
-              id: winner.id,
-              name: winner.name,
-              victoryPoints: winner.victoryPoints,
+              id: realWinner.id,
+              name: realWinner.name,
+              victoryPoints: realWinner.victoryPoints,
               agentName: winnerAgent?.name,
             },
-            message: `Game ended after ${maxTurns} turns. ${winner.name} wins with ${winner.victoryPoints} VP!`,
+            message: getVictoryMessage(winnerAgent!),
             gameState: serializeGameState(gameState),
+          });
+        } else if (turnCount >= maxTurns) {
+          // Max turns reached without winner - declare winner by VP only if they have reasonable points
+          const leader = gameState.players.reduce((prev, current) => 
+            current.victoryPoints > prev.victoryPoints ? current : prev
+          );
+          
+          if (leader.victoryPoints >= 5) {
+            // Only declare winner if they have at least 5 VP (reasonable progress)
+            const winnerAgent = agentConfigs[gameState.players.indexOf(leader)];
+            send({ 
+              type: 'victory', 
+              winner: {
+                id: leader.id,
+                name: leader.name,
+                victoryPoints: leader.victoryPoints,
+                agentName: winnerAgent?.name,
+              },
+              message: `Game ended after ${maxTurns} turns. ${leader.name} wins with ${leader.victoryPoints} VP!`,
+              gameState: serializeGameState(gameState),
+            });
+          } else {
+            // Game ended prematurely with no real progress
+            send({
+              type: 'error',
+              message: `Game ended after ${turnCount} turns with insufficient progress. Leader has only ${leader.victoryPoints} VP. The game may have encountered errors during setup.`,
+            });
+          }
+        } else {
+          // Game ended due to errors before maxTurns
+          send({
+            type: 'error',
+            message: `Game ended prematurely after ${turnCount} turns due to errors. No winner declared.`,
           });
         }
 

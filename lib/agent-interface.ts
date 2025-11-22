@@ -159,7 +159,32 @@ export function getGameStateForAgent(state: GameState, playerId: string): any {
           });
         }
         
-        return edges.map(e => ({ id: e.id, vertices: e.vertexIds }));
+        // CRITICAL: Final validation - only return edges with adjacent vertices
+        const validEdges = edges.filter(e => {
+          const [v1Id, v2Id] = e.vertexIds;
+          const v1Parts = v1Id.split('_');
+          const v2Parts = v2Id.split('_');
+          const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
+          const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
+          
+          const chebyshevDist = Math.max(
+            Math.abs(v1Coords.q - v2Coords.q),
+            Math.abs(v1Coords.r - v2Coords.r),
+            Math.abs(v1Coords.s - v2Coords.s)
+          );
+          
+          if (chebyshevDist !== 1) {
+            console.error(`⚠️ Agent Interface: Filtering invalid edge ${e.id} (Chebyshev dist=${chebyshevDist})`);
+            return false;
+          }
+          return true;
+        });
+        
+        if (validEdges.length < edges.length) {
+          console.error(`⚠️ Agent Interface filtered out ${edges.length - validEdges.length} invalid edges`);
+        }
+        
+        return validEdges.map(e => ({ id: e.id, vertices: e.vertexIds }));
       })(),
     },
     possibleActions: getPossibleActions(state, playerId),
@@ -244,34 +269,61 @@ export function executeAgentAction(state: GameState, playerId: string, action: A
         // NEW: Support numeric option (1-5) or old edgeId format
         let edgeId: string | null = null;
         
+        console.log(`\n🛣️  BUILD_ROAD requested by ${player.name}`);
+        console.log(`   Action data:`, action.data);
+        console.log(`   Phase: ${state.phase}`);
+        console.log(`   Available edges count: ${availableEdgeIds.length}`);
+        
         if (typeof action.data === 'number') {
           // New format: just a number
           edgeId = getEdgeIdFromOption(playerId, action.data);
+          console.log(`   ✅ Option ${action.data} → edge ${edgeId}`);
         } else if (action.data?.option) {
           // New format: { option: number }
           edgeId = getEdgeIdFromOption(playerId, action.data.option);
+          console.log(`   ✅ Option ${action.data.option} → edge ${edgeId}`);
         } else if (action.data?.edgeId) {
           // Old format: { edgeId: string } - validate it's in available list
+          console.log(`   Validating direct edgeId: ${action.data.edgeId}`);
+          
           if (!availableEdgeIds.includes(action.data.edgeId)) {
             console.error(`❌ INVALID EDGE: Agent tried to use edge "${action.data.edgeId}" which is NOT in available list`);
+            console.error(`   Available edges:`, availableEdgeIds.slice(0, 10));
+            
+            // Check why it's not available
+            const targetEdge = state.board.edges.find(e => e.id === action.data.edgeId);
+            if (!targetEdge) {
+              console.error(`   Edge doesn't exist on board!`);
+            } else if (targetEdge.road) {
+              console.error(`   Edge already has road owned by ${targetEdge.road.playerId}`);
+            } else {
+              console.error(`   Edge is not connected to player's network`);
+            }
+            
             return { 
               success: false, 
               message: `Invalid edge ID. The edge "${action.data.edgeId}" is either occupied or not connected to your network.` 
             };
           }
           edgeId = action.data.edgeId;
+          console.log(`   ✅ Direct edgeId validated: ${edgeId}`);
         } else {
+          console.error(`   ❌ No valid edge data provided`);
           return { success: false, message: 'Edge option or ID required' };
         }
 
         if (!edgeId) {
+          console.error(`   ❌ edgeId is null after processing`);
           return { success: false, message: 'Invalid edge option' };
         }
 
+        console.log(`   🎯 Attempting to build road at ${edgeId}`);
         const roadSuccess = buildRoad(state, playerId, { edgeId });
         if (!roadSuccess) {
+          console.error(`   ❌ buildRoad() returned false`);
           return { success: false, message: 'Cannot build road at this location' };
         }
+        console.log(`   ✅ Road built successfully`);
         // After road in setup, advance to next player/phase
         if (state.phase === 'setup_road_1') {
           state.currentPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
@@ -301,34 +353,63 @@ export function executeAgentAction(state: GameState, playerId: string, action: A
         // NEW: Support numeric option (1-5) or old vertexId format
         let vertexId: string | null = null;
         
+        console.log(`\n🏗️  BUILD_SETTLEMENT requested by ${player.name}`);
+        console.log(`   Action data:`, action.data);
+        console.log(`   Phase: ${state.phase}`);
+        console.log(`   Available vertices count: ${availableVertexIds.length}`);
+        
         if (typeof action.data === 'number') {
           // New format: just a number
           vertexId = getVertexIdFromOption(playerId, action.data);
+          console.log(`   ✅ Option ${action.data} → vertex ${vertexId}`);
         } else if (action.data?.option) {
           // New format: { option: number }
           vertexId = getVertexIdFromOption(playerId, action.data.option);
+          console.log(`   ✅ Option ${action.data.option} → vertex ${vertexId}`);
         } else if (action.data?.vertexId) {
           // Old format: { vertexId: string } - validate it's in available list
+          console.log(`   Validating direct vertexId: ${action.data.vertexId}`);
+          console.log(`   Available vertex IDs:`, availableVertexIds.slice(0, 10));
+          
           if (!availableVertexIds.includes(action.data.vertexId)) {
             console.error(`❌ INVALID VERTEX: Agent tried to use vertex "${action.data.vertexId}" which is NOT in available list`);
+            console.error(`   Available vertices:`, availableVertexIds);
+            
+            // Check why it's not available
+            const targetVertex = state.board.vertices.find(v => v.id === action.data.vertexId);
+            if (!targetVertex) {
+              console.error(`   Vertex doesn't exist on board!`);
+            } else if (targetVertex.building) {
+              console.error(`   Vertex is occupied by ${targetVertex.building.playerId}`);
+            } else {
+              console.error(`   Vertex violates distance rule (too close to another settlement)`);
+            }
+            
             return { 
               success: false, 
               message: `Invalid vertex ID. The vertex "${action.data.vertexId}" is either occupied or too close to another settlement (violates distance rule).` 
             };
           }
           vertexId = action.data.vertexId;
+          console.log(`   ✅ Direct vertexId validated: ${vertexId}`);
         } else {
+          console.error(`   ❌ No valid vertex data provided`);
           return { success: false, message: 'Vertex option or ID required' };
         }
 
         if (!vertexId) {
+          console.error(`   ❌ vertexId is null after processing`);
           return { success: false, message: 'Invalid vertex option' };
         }
 
+        console.log(`   🎯 Attempting to build settlement at ${vertexId}`);
         const settlementSuccess = buildSettlement(state, playerId, { vertexId });
         if (!settlementSuccess) {
+          console.error(`   ❌ buildSettlement() returned false`);
           return { success: false, message: 'Cannot build settlement at this location' };
         }
+        console.log(`   ✅ Settlement built successfully`);
+        
         // Auto-advance phase (but keep same player for road)
         if (state.phase === 'setup_settlement_1') {
           state.phase = 'setup_road_1';

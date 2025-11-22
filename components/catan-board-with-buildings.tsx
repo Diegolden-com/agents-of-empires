@@ -284,23 +284,82 @@ export function CatanBoardWithBuildings({ gameState }: CatanBoardWithBuildingsPr
   const offsetX = -minX + 20;
   const offsetY = -minY + 20;
 
-  // Calcular posiciones de vértices para edificios
+  // Calcular posiciones de vértices usando los hexágonos a los que pertenecen
   const vertexPositions = new Map<string, { x: number; y: number }>();
-  hexPositions.forEach(({ hex, x, y }) => {
-    const hexCorners = [
-      { dx: width / 2, dy: 0 },
-      { dx: width, dy: height / 4 },
-      { dx: width, dy: (3 * height) / 4 },
-      { dx: width / 2, dy: height },
-      { dx: 0, dy: (3 * height) / 4 },
-      { dx: 0, dy: height / 4 },
-    ];
-
-    hexCorners.forEach((corner, idx) => {
-      const vertexKey = `${Math.round((x + corner.dx) * 10) / 10}_${Math.round((y + corner.dy) * 10) / 10}`;
-      vertexPositions.set(vertexKey, { x: x + corner.dx, y: y + corner.dy });
+  
+  // Crear un mapa de hexId a posición
+  const hexPositionMap = new Map(hexPositions.map(hp => [hp.hex.id, { x: hp.x, y: hp.y, hex: hp.hex }]));
+  
+  // Definir los offsets de vértices (mismo que board-generator.ts)
+  const getVertexOffsetInHex = (vertexId: string, hexId: string): { dx: number; dy: number } | null => {
+    const hexPos = hexPositionMap.get(hexId);
+    if (!hexPos) return null;
+    
+    // Parse vertex cubic coords
+    const vParts = vertexId.split('_');
+    const vQ = parseInt(vParts[1]);
+    const vR = parseInt(vParts[2]);
+    const vS = parseInt(vParts[3]);
+    
+    // Parse hex cubic coords
+    const hParts = hexId.split('_');
+    const hQ = parseInt(hParts[1]);
+    const hR = parseInt(hParts[2]);
+    const hS = parseInt(hParts[3]);
+    
+    // Calculate the offset from hex center to vertex
+    const offsetQ = vQ - (hQ * 2);
+    const offsetR = vR - (hR * 2);
+    const offsetS = vS - (hS * 2);
+    
+    // Map offset to pixel position (same order as board-generator.ts)
+    const cornerMap: { [key: string]: { dx: number; dy: number } } = {
+      '1_-1_0': { dx: width / 2, dy: 0 },                  // Top
+      '1_0_-1': { dx: width, dy: height / 4 },             // Top-right
+      '0_1_-1': { dx: width, dy: (3 * height) / 4 },       // Bottom-right
+      '-1_1_0': { dx: width / 2, dy: height },             // Bottom
+      '-1_0_1': { dx: 0, dy: (3 * height) / 4 },           // Bottom-left
+      '0_-1_1': { dx: 0, dy: height / 4 },                 // Top-left
+    };
+    
+    const offsetKey = `${offsetQ}_${offsetR}_${offsetS}`;
+    return cornerMap[offsetKey] || null;
+  };
+  
+  // Para cada vértice, calcular su posición usando el primer hex al que pertenece
+  gameState.board.vertices.forEach(vertex => {
+    if (vertex.hexIds.length === 0) {
+      console.warn(`⚠️ Vertex ${vertex.id} has no adjacent hexes`);
+      return;
+    }
+    
+    // Usar el primer hex para calcular la posición
+    const firstHexId = vertex.hexIds[0];
+    const hexData = hexPositionMap.get(firstHexId);
+    
+    if (!hexData) {
+      console.warn(`⚠️ Hex ${firstHexId} not found for vertex ${vertex.id}`);
+      return;
+    }
+    
+    const offset = getVertexOffsetInHex(vertex.id, firstHexId);
+    if (!offset) {
+      console.warn(`⚠️ Could not calculate offset for vertex ${vertex.id} in hex ${firstHexId}`);
+      return;
+    }
+    
+    vertexPositions.set(vertex.id, {
+      x: hexData.x + offset.dx,
+      y: hexData.y + offset.dy,
     });
   });
+  
+  const missingCount = gameState.board.vertices.length - vertexPositions.size;
+  if (missingCount > 0) {
+    console.error(`❌ ${missingCount} vertices are missing positions!`);
+  } else {
+    console.log(`✅ All ${vertexPositions.size} vertices have positions`);
+  }
 
   return (
     <div className="flex items-center justify-center p-4 bg-gradient-to-br from-blue-100 via-cyan-100 to-blue-200 rounded-xl shadow-inner">
@@ -335,13 +394,39 @@ export function CatanBoardWithBuildings({ gameState }: CatanBoardWithBuildingsPr
               .filter((edge) => edge.road)
               .map((edge) => {
                 const [v1Id, v2Id] = edge.vertexIds;
-                const v1Key = Array.from(vertexPositions.keys()).find((k) => k.includes(v1Id.split('_')[1]));
-                const v2Key = Array.from(vertexPositions.keys()).find((k) => k.includes(v2Id.split('_')[1]));
+                const v1Pos = vertexPositions.get(v1Id);
+                const v2Pos = vertexPositions.get(v2Id);
                 
-                if (!v1Key || !v2Key) return null;
+                if (!v1Pos || !v2Pos) {
+                  console.warn(`⚠️ Road ${edge.id}: Cannot find positions for vertices ${v1Id} or ${v2Id}`);
+                  return null;
+                }
                 
-                const v1Pos = vertexPositions.get(v1Key)!;
-                const v2Pos = vertexPositions.get(v2Key)!;
+                // Calculate pixel distance for debugging
+                const pixelDistance = Math.sqrt(
+                  Math.pow(v2Pos.x - v1Pos.x, 2) + Math.pow(v2Pos.y - v1Pos.y, 2)
+                );
+                
+                // Parse cubic coordinates for validation
+                const v1Parts = v1Id.split('_');
+                const v2Parts = v2Id.split('_');
+                const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
+                const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
+                const chebyshevDist = Math.max(
+                  Math.abs(v1Coords.q - v2Coords.q),
+                  Math.abs(v1Coords.r - v2Coords.r),
+                  Math.abs(v1Coords.s - v2Coords.s)
+                );
+                
+                if (chebyshevDist !== 1) {
+                  console.error(`🚨 RENDERING INVALID ROAD: ${edge.id}`);
+                  console.error(`   ${v1Id} to ${v2Id}`);
+                  console.error(`   Chebyshev distance: ${chebyshevDist} (should be 1)`);
+                  console.error(`   Pixel distance: ${pixelDistance.toFixed(1)}px`);
+                  console.error(`   v1 pos: (${v1Pos.x.toFixed(1)}, ${v1Pos.y.toFixed(1)})`);
+                  console.error(`   v2 pos: (${v2Pos.x.toFixed(1)}, ${v2Pos.y.toFixed(1)})`);
+                }
+                
                 const player = gameState.players.find((p) => p.id === edge.road!.playerId);
                 
                 return (
@@ -360,11 +445,12 @@ export function CatanBoardWithBuildings({ gameState }: CatanBoardWithBuildingsPr
             {gameState.board.vertices
               .filter((vertex) => vertex.building)
               .map((vertex) => {
-                // Aproximar posición del vértice (simplificado)
-                const vertexKey = Array.from(vertexPositions.keys())[gameState.board.vertices.indexOf(vertex)];
-                const pos = vertexPositions.get(vertexKey || '');
+                const pos = vertexPositions.get(vertex.id);
                 
-                if (!pos) return null;
+                if (!pos) {
+                  console.warn(`⚠️ Building at ${vertex.id}: Cannot find position`);
+                  return null;
+                }
 
                 const player = gameState.players.find((p) => p.id === vertex.building!.playerId);
                 const color = PLAYER_COLORS[player?.color || 'white'] || '#ffffff';
