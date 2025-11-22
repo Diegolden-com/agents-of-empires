@@ -284,40 +284,82 @@ export function CatanBoardWithBuildings({ gameState }: CatanBoardWithBuildingsPr
   const offsetX = -minX + 20;
   const offsetY = -minY + 20;
 
-  // Calcular posiciones de vértices - cada vértice está en las ESQUINAS de los hexágonos
+  // Calcular posiciones de vértices usando los hexágonos a los que pertenecen
   const vertexPositions = new Map<string, { x: number; y: number }>();
   
-  // Primero, calcular todas las esquinas de cada hexágono
-  hexPositions.forEach(({ hex, x, y }) => {
-    // Las 6 esquinas de un hexágono en orden (desde arriba, sentido horario)
-    const corners = [
-      { dx: width / 2, dy: 0, offset: { q: 1, r: -1, s: 0 } },           // Top
-      { dx: width, dy: height / 4, offset: { q: 1, r: 0, s: -1 } },      // Top-right
-      { dx: width, dy: (3 * height) / 4, offset: { q: 0, r: 1, s: -1 } }, // Bottom-right
-      { dx: width / 2, dy: height, offset: { q: -1, r: 1, s: 0 } },      // Bottom
-      { dx: 0, dy: (3 * height) / 4, offset: { q: -1, r: 0, s: 1 } },    // Bottom-left
-      { dx: 0, dy: height / 4, offset: { q: 0, r: -1, s: 1 } },          // Top-left
-    ];
-
-    // Para cada esquina, calcular su vertex ID basado en las coordenadas del hex
-    corners.forEach(corner => {
-      // Las coordenadas del vértice son las del hex * 2 + offset
-      const hexQ = hex.position.q * 2;
-      const hexR = hex.position.r * 2;
-      const hexS = hex.position.s * 2;
-      
-      const vertexQ = hexQ + corner.offset.q;
-      const vertexR = hexR + corner.offset.r;
-      const vertexS = hexS + corner.offset.s;
-      
-      const vertexId = `v_${vertexQ}_${vertexR}_${vertexS}`;
-      
-      // Solo agregar si no existe (múltiples hexágonos comparten vértices)
-      if (!vertexPositions.has(vertexId)) {
-        vertexPositions.set(vertexId, { x: x + corner.dx, y: y + corner.dy });
-      }
+  // Crear un mapa de hexId a posición
+  const hexPositionMap = new Map(hexPositions.map(hp => [hp.hex.id, { x: hp.x, y: hp.y, hex: hp.hex }]));
+  
+  // Definir los offsets de vértices (mismo que board-generator.ts)
+  const getVertexOffsetInHex = (vertexId: string, hexId: string): { dx: number; dy: number } | null => {
+    const hexPos = hexPositionMap.get(hexId);
+    if (!hexPos) return null;
+    
+    // Parse vertex cubic coords
+    const vParts = vertexId.split('_');
+    const vQ = parseInt(vParts[1]);
+    const vR = parseInt(vParts[2]);
+    const vS = parseInt(vParts[3]);
+    
+    // Parse hex cubic coords
+    const hParts = hexId.split('_');
+    const hQ = parseInt(hParts[1]);
+    const hR = parseInt(hParts[2]);
+    const hS = parseInt(hParts[3]);
+    
+    // Calculate the offset from hex center to vertex
+    const offsetQ = vQ - (hQ * 2);
+    const offsetR = vR - (hR * 2);
+    const offsetS = vS - (hS * 2);
+    
+    // Map offset to pixel position (same order as board-generator.ts)
+    const cornerMap: { [key: string]: { dx: number; dy: number } } = {
+      '1_-1_0': { dx: width / 2, dy: 0 },                  // Top
+      '1_0_-1': { dx: width, dy: height / 4 },             // Top-right
+      '0_1_-1': { dx: width, dy: (3 * height) / 4 },       // Bottom-right
+      '-1_1_0': { dx: width / 2, dy: height },             // Bottom
+      '-1_0_1': { dx: 0, dy: (3 * height) / 4 },           // Bottom-left
+      '0_-1_1': { dx: 0, dy: height / 4 },                 // Top-left
+    };
+    
+    const offsetKey = `${offsetQ}_${offsetR}_${offsetS}`;
+    return cornerMap[offsetKey] || null;
+  };
+  
+  // Para cada vértice, calcular su posición usando el primer hex al que pertenece
+  gameState.board.vertices.forEach(vertex => {
+    if (vertex.hexIds.length === 0) {
+      console.warn(`⚠️ Vertex ${vertex.id} has no adjacent hexes`);
+      return;
+    }
+    
+    // Usar el primer hex para calcular la posición
+    const firstHexId = vertex.hexIds[0];
+    const hexData = hexPositionMap.get(firstHexId);
+    
+    if (!hexData) {
+      console.warn(`⚠️ Hex ${firstHexId} not found for vertex ${vertex.id}`);
+      return;
+    }
+    
+    const offset = getVertexOffsetInHex(vertex.id, firstHexId);
+    if (!offset) {
+      console.warn(`⚠️ Could not calculate offset for vertex ${vertex.id} in hex ${firstHexId}`);
+      return;
+    }
+    
+    vertexPositions.set(vertex.id, {
+      x: hexData.x + offset.dx,
+      y: hexData.y + offset.dy,
     });
   });
+  
+  const missingCount = gameState.board.vertices.length - vertexPositions.size;
+  if (missingCount > 0) {
+    console.error(`❌ ${missingCount} vertices are missing positions!`);
+  } else {
+    console.log(`✅ All ${vertexPositions.size} vertices have positions`);
+  }
 
   return (
     <div className="flex items-center justify-center p-4 bg-gradient-to-br from-blue-100 via-cyan-100 to-blue-200 rounded-xl shadow-inner">
