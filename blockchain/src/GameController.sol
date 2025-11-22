@@ -6,16 +6,10 @@ import "./GameVRFConsumer.sol";
 contract GameController {
     address public owner;
     GameVRFConsumer public vrf;
+    address public creWorkflow;
 
     uint256 public constant MIN_DEPOSIT = 0.0001 ether;
     uint256 public gameCounter;
-
-    // Demo mode: only one active game per player
-    // TODO: Set to false in production to allow multiple concurrent games
-    bool public demoMode = true;
-
-    // Track active game for each player (for demo mode)
-    mapping(address => uint256) public playerActiveGame;
 
     // ----------------------
     // ENUMS & CONSTANTS
@@ -36,12 +30,12 @@ contract GameController {
     }
 
     enum Resource {
-        MADERA,      // Wood - Verde Oscuro
-        OVEJA,       // Sheep - Verde Claro
-        TRIGO,       // Wheat - Amarillo
-        LADRILLO,    // Brick - Rojo/Marrón
-        MINERAL,     // Ore - Gris
-        DESIERTO     // Desert - Arena (no produce)
+        WOOD,        // Wood
+        SHEEP,       // Sheep
+        WHEAT,       // Wheat
+        BRICK,       // Brick
+        ORE,         // Ore
+        DESERT       // Desert (no produce)
     }
 
     uint256 constant TOTAL_COMPANIES = 5;
@@ -125,6 +119,7 @@ contract GameController {
     );
     event GameActivated(uint256 indexed gameId);
     event GameEnded(uint256 indexed gameId, uint8 winner, uint256 duration);
+    event CREWorkflowUpdated(address indexed oldWorkflow, address indexed newWorkflow);
 
     // TODO: Add reward events
     // event RewardDistributed(uint256 indexed gameId, address indexed winner, uint256 amount);
@@ -161,18 +156,6 @@ contract GameController {
         require(msg.value >= MIN_DEPOSIT, "NOT_ENOUGH_ETH");
         require(bettorChoice < PLAYERS_PER_GAME, "INVALID_BETTOR_CHOICE");
 
-        // Demo mode: check if player already has an active game
-        if (demoMode) {
-            uint256 activeGameId = playerActiveGame[msg.sender];
-            if (activeGameId > 0) {
-                GameStatus status = games[activeGameId].status;
-                require(
-                    status == GameStatus.FINISHED || status == GameStatus.CANCELLED,
-                    "PLAYER_HAS_ACTIVE_GAME"
-                );
-            }
-        }
-
         gameCounter++;
         gameId = gameCounter;
 
@@ -190,23 +173,12 @@ contract GameController {
         g.endTime = 0;
         g.winner = 0;
 
-        // Initialize AI players (already default initialized to 0)
-
-        // Track active game for player
-        playerActiveGame[msg.sender] = gameId;
-
         emit GameStarted(gameId, msg.sender, bettorChoice, requestId);
     }
 
     // ----------------------------------------------------------
     // CALLBACK FROM VRF (via GameVRFConsumer)
     // ----------------------------------------------------------
-    /**
-     * @notice Callback from GameVRFConsumer after VRF fulfills randomness
-     * @param gameId The game ID
-     * @param requestId The VRF request ID
-     * @param randomWords Array of random words from VRF
-     */
     function receiveRandomWords(
         uint256 gameId,
         uint256 requestId,
@@ -299,19 +271,8 @@ contract GameController {
 
     /**
      * @notice Generate randomized Catan board with 19 hexagons
-     * @param gameId The game ID
-     * @param seed Random seed for shuffle
-     *
-     * Board composition:
-     * - 4 Madera (Wood)
-     * - 4 Oveja (Sheep)
-     * - 4 Trigo (Wheat)
-     * - 3 Ladrillo (Brick)
-     * - 3 Mineral (Ore)
-     * - 1 Desierto (Desert)
-     *
-     * Dice numbers (18 total, desert gets 0):
-     * 2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12
+     * Resources: 4 Wood, 4 Sheep, 4 Wheat, 3 Brick, 3 Ore, 1 Desert
+     * Dice: 2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12
      */
     function _generateCatanBoard(uint256 gameId, uint256 seed) internal {
         Game storage g = games[gameId];
@@ -320,18 +281,18 @@ contract GameController {
         Resource[19] memory resources;
         uint8 idx = 0;
 
-        // 4 Madera
-        for (uint8 i = 0; i < 4; i++) { resources[idx++] = Resource.MADERA; }
-        // 4 Oveja
-        for (uint8 i = 0; i < 4; i++) { resources[idx++] = Resource.OVEJA; }
-        // 4 Trigo
-        for (uint8 i = 0; i < 4; i++) { resources[idx++] = Resource.TRIGO; }
-        // 3 Ladrillo
-        for (uint8 i = 0; i < 3; i++) { resources[idx++] = Resource.LADRILLO; }
-        // 3 Mineral
-        for (uint8 i = 0; i < 3; i++) { resources[idx++] = Resource.MINERAL; }
-        // 1 Desierto
-        resources[idx] = Resource.DESIERTO;
+        // 4 Wood
+        for (uint8 i = 0; i < 4; i++) { resources[idx++] = Resource.WOOD; }
+        // 4 Sheep
+        for (uint8 i = 0; i < 4; i++) { resources[idx++] = Resource.SHEEP; }
+        // 4 Wheat
+        for (uint8 i = 0; i < 4; i++) { resources[idx++] = Resource.WHEAT; }
+        // 3 Brick
+        for (uint8 i = 0; i < 3; i++) { resources[idx++] = Resource.BRICK; }
+        // 3 Ore
+        for (uint8 i = 0; i < 3; i++) { resources[idx++] = Resource.ORE; }
+        // 1 Desert
+        resources[idx] = Resource.DESERT;
 
         // Create dice numbers array (standard Catan distribution)
         uint8[18] memory diceNumbers = [
@@ -356,7 +317,7 @@ contract GameController {
             g.board[i].resource = resources[i];
 
             // Desert gets no dice number
-            if (resources[i] == Resource.DESIERTO) {
+            if (resources[i] == Resource.DESERT) {
                 g.board[i].diceNumber = 0;
             } else {
                 g.board[i].diceNumber = diceNumbers[diceIdx++];
@@ -369,19 +330,17 @@ contract GameController {
     // ----------------------------------------------------------
     /**
      * @notice Ends an active Catan game and records the winner
+     * @dev Only callable by Chainlink CRE workflow or owner
      * @param gameId The ID of the game to end
      * @param _winner Winner indicator: 0 = no winner/cancelled, 1-4 = AI player index who won
      */
     function endGame(uint256 gameId, uint8 _winner) external {
-        Game storage g = games[gameId];
-
-        // Only the bettor or owner can end the game
-        // TODO: In production, MUST add oracle/backend signature verification
-        // to ensure the winner is determined by the actual Catan game outcome
         require(
-            msg.sender == g.bettor || msg.sender == owner,
-            "NOT_AUTHORIZED"
+            msg.sender == creWorkflow || msg.sender == owner,
+            "ONLY_CRE_OR_OWNER"
         );
+
+        Game storage g = games[gameId];
         require(g.status == GameStatus.ACTIVE, "GAME_NOT_ACTIVE");
         require(_winner <= PLAYERS_PER_GAME, "INVALID_WINNER");
 
@@ -389,60 +348,12 @@ contract GameController {
         g.endTime = block.timestamp;
         g.winner = _winner;
 
-        uint256 duration = g.endTime - g.startTime;
+        emit GameEnded(gameId, _winner, g.endTime - g.startTime);
 
-        emit GameEnded(gameId, _winner, duration);
-
-        // TODO: Implement reward distribution logic
-        // This should handle:
-        // 1. Check if bettor's choice matches the winner
-        // 2. Calculate rewards based on winner, odds, and game duration
-        // 3. Handle prize pool distribution
-        // 4. Update player stats/rankings
-        // 5. Emit reward events
-        //
-        // Potential reward logic:
-        // if (_winner > 0 && _winner <= PLAYERS_PER_GAME) {
-        //     // Game finished with a winner
-        //     uint8 winnerIndex = _winner - 1; // Convert to 0-based index
-        //     if (g.bettorChoice == winnerIndex) {
-        //         // Bettor won!
-        //         uint256 rewardAmount = calculateReward(gameId);
-        //         g.rewardAmount = g.deposit + rewardAmount;
-        //         // payable(g.bettor).transfer(g.rewardAmount);
-        //     } else {
-        //         // Bettor lost, house keeps deposit
-        //         // g.houseRewardPool += g.deposit;
-        //     }
-        // } else {
-        //     // Game cancelled or no winner, refund deposit
-        //     // payable(g.bettor).transfer(g.deposit);
-        // }
+        // TODO: Implement reward distribution based on bettor's choice vs winner
     }
 
-    // TODO: Implement reward calculation function
-    // function calculateReward(uint256 gameId, uint8 winner) internal view returns (uint256) {
-    //     Game storage g = games[gameId];
-    //     uint256 baseReward = g.deposit;
-    //     // Add bonus calculations based on:
-    //     // - Game duration
-    //     // - Difficulty (based on AI model)
-    //     // - Streak bonuses
-    //     // return calculatedAmount;
-    // }
-
-    // TODO: Implement reward claiming function
-    // function claimReward(uint256 gameId) external {
-    //     Game storage g = games[gameId];
-    //     require(msg.sender == g.player, "NOT_GAME_OWNER");
-    //     require(g.status == GameStatus.FINISHED, "GAME_NOT_FINISHED");
-    //     require(!g.rewardClaimed, "ALREADY_CLAIMED");
-    //     require(g.rewardAmount > 0, "NO_REWARD");
-    //
-    //     g.rewardClaimed = true;
-    //     payable(msg.sender).transfer(g.rewardAmount);
-    //     emit RewardClaimed(gameId, msg.sender, g.rewardAmount);
-    // }
+    // TODO: Implement reward system (calculateReward, claimReward, etc.)
 
     // ----------------------------------------------------------
     // VIEW
@@ -455,110 +366,38 @@ contract GameController {
         return games[gameId];
     }
 
-    /**
-     * @notice Get the status of a game
-     * @param gameId The ID of the game
-     * @return status The current status of the game
-     */
-    function getGameStatus(uint256 gameId)
-        external
-        view
-        returns (GameStatus)
-    {
+    function getGameStatus(uint256 gameId) external view returns (GameStatus) {
         return games[gameId].status;
     }
 
-    /**
-     * @notice Get game result information
-     * @param gameId The ID of the game
-     * @return winner The winner indicator
-     * @return duration The game duration in seconds (0 if not finished)
-     */
-    function getGameResult(uint256 gameId)
-        external
-        view
-        returns (uint8 winner, uint256 duration)
-    {
+    function getGameResult(uint256 gameId) external view returns (uint8 winner, uint256 duration) {
         Game storage g = games[gameId];
         winner = g.winner;
         duration = g.endTime > 0 ? g.endTime - g.startTime : 0;
     }
 
-    /**
-     * @notice Get the AI players for a game
-     * @param gameId The ID of the game
-     * @return aiPlayers Array of 4 AI players with their assignments
-     */
-    function getAIPlayers(uint256 gameId)
-        external
-        view
-        returns (AIPlayer[4] memory aiPlayers)
-    {
+    function getAIPlayers(uint256 gameId) external view returns (AIPlayer[4] memory) {
         return games[gameId].aiPlayers;
     }
 
-    /**
-     * @notice Get a specific AI player's information
-     * @param gameId The ID of the game
-     * @param playerIndex The index of the AI player (0-3)
-     * @return company The company of the AI player
-     * @return modelIndex The model index in MODEL_NAMES array
-     * @return playOrder The play order (1-4)
-     * @return modelName The full model name string
-     */
     function getAIPlayer(uint256 gameId, uint8 playerIndex)
         external
         view
-        returns (
-            Company company,
-            uint8 modelIndex,
-            uint8 playOrder,
-            string memory modelName
-        )
+        returns (Company company, uint8 modelIndex, uint8 playOrder, string memory modelName)
     {
         require(playerIndex < PLAYERS_PER_GAME, "INVALID_PLAYER_INDEX");
         AIPlayer memory player = games[gameId].aiPlayers[playerIndex];
-        return (
-            player.company,
-            player.modelIndex,
-            player.playOrder,
-            MODEL_NAMES[player.modelIndex]
-        );
+        return (player.company, player.modelIndex, player.playOrder, MODEL_NAMES[player.modelIndex]);
     }
 
-    /**
-     * @notice Get bettor's choice for a game
-     * @param gameId The ID of the game
-     * @return bettorChoice The AI player index the bettor chose (0-3)
-     */
-    function getBettorChoice(uint256 gameId)
-        external
-        view
-        returns (uint8)
-    {
+    function getBettorChoice(uint256 gameId) external view returns (uint8) {
         return games[gameId].bettorChoice;
     }
 
-    /**
-     * @notice Get the complete Catan board for a game
-     * @param gameId The ID of the game
-     * @return board Array of 19 hexagons with resources and dice numbers
-     */
-    function getBoard(uint256 gameId)
-        external
-        view
-        returns (Hexagon[19] memory board)
-    {
+    function getBoard(uint256 gameId) external view returns (Hexagon[19] memory) {
         return games[gameId].board;
     }
 
-    /**
-     * @notice Get a specific hexagon from the board
-     * @param gameId The ID of the game
-     * @param hexIndex The index of the hexagon (0-18)
-     * @return resource The resource type of the hexagon
-     * @return diceNumber The dice number (2-12, or 0 for desert)
-     */
     function getHexagon(uint256 gameId, uint8 hexIndex)
         external
         view
@@ -569,45 +408,22 @@ contract GameController {
         return (hexagon.resource, hexagon.diceNumber);
     }
 
-    /**
-     * @notice Get resource name as string
-     * @param resource The resource enum value
-     * @return name The resource name
-     */
-    function getResourceName(Resource resource)
-        external
-        pure
-        returns (string memory name)
-    {
-        if (resource == Resource.MADERA) return "Madera (Wood)";
-        if (resource == Resource.OVEJA) return "Oveja (Sheep)";
-        if (resource == Resource.TRIGO) return "Trigo (Wheat)";
-        if (resource == Resource.LADRILLO) return "Ladrillo (Brick)";
-        if (resource == Resource.MINERAL) return "Mineral (Ore)";
-        return "Desierto (Desert)";
-    }
-
-    /**
-     * @notice Get the active game ID for a player (if any)
-     * @param player The player address
-     * @return gameId The active game ID (0 if no active game)
-     */
-    function getPlayerActiveGame(address player)
-        external
-        view
-        returns (uint256)
-    {
-        return playerActiveGame[player];
+    function getResourceName(Resource resource) external pure returns (string memory) {
+        if (resource == Resource.WOOD) return "Wood";
+        if (resource == Resource.SHEEP) return "Sheep";
+        if (resource == Resource.WHEAT) return "Wheat";
+        if (resource == Resource.BRICK) return "Brick";
+        if (resource == Resource.ORE) return "Ore";
+        return "Desert";
     }
 
     // ----------------------------------------------------------
-    // ADMIN FUNCTIONS
+    // ADMIN
     // ----------------------------------------------------------
-    /**
-     * @notice Toggle demo mode (only owner)
-     * @param _demoMode true to enable demo mode, false to disable
-     */
-    function setDemoMode(bool _demoMode) external onlyOwner {
-        demoMode = _demoMode;
+    function setCREWorkflow(address _creWorkflow) external onlyOwner {
+        require(_creWorkflow != address(0), "ZERO_ADDRESS");
+        address oldWorkflow = creWorkflow;
+        creWorkflow = _creWorkflow;
+        emit CREWorkflowUpdated(oldWorkflow, _creWorkflow);
     }
 }
