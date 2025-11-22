@@ -284,21 +284,38 @@ export function CatanBoardWithBuildings({ gameState }: CatanBoardWithBuildingsPr
   const offsetX = -minX + 20;
   const offsetY = -minY + 20;
 
-  // Calcular posiciones de vértices para edificios
+  // Calcular posiciones de vértices - cada vértice está en las ESQUINAS de los hexágonos
   const vertexPositions = new Map<string, { x: number; y: number }>();
+  
+  // Primero, calcular todas las esquinas de cada hexágono
   hexPositions.forEach(({ hex, x, y }) => {
-    const hexCorners = [
-      { dx: width / 2, dy: 0 },
-      { dx: width, dy: height / 4 },
-      { dx: width, dy: (3 * height) / 4 },
-      { dx: width / 2, dy: height },
-      { dx: 0, dy: (3 * height) / 4 },
-      { dx: 0, dy: height / 4 },
+    // Las 6 esquinas de un hexágono en orden (desde arriba, sentido horario)
+    const corners = [
+      { dx: width / 2, dy: 0, offset: { q: 1, r: -1, s: 0 } },           // Top
+      { dx: width, dy: height / 4, offset: { q: 1, r: 0, s: -1 } },      // Top-right
+      { dx: width, dy: (3 * height) / 4, offset: { q: 0, r: 1, s: -1 } }, // Bottom-right
+      { dx: width / 2, dy: height, offset: { q: -1, r: 1, s: 0 } },      // Bottom
+      { dx: 0, dy: (3 * height) / 4, offset: { q: -1, r: 0, s: 1 } },    // Bottom-left
+      { dx: 0, dy: height / 4, offset: { q: 0, r: -1, s: 1 } },          // Top-left
     ];
 
-    hexCorners.forEach((corner, idx) => {
-      const vertexKey = `${Math.round((x + corner.dx) * 10) / 10}_${Math.round((y + corner.dy) * 10) / 10}`;
-      vertexPositions.set(vertexKey, { x: x + corner.dx, y: y + corner.dy });
+    // Para cada esquina, calcular su vertex ID basado en las coordenadas del hex
+    corners.forEach(corner => {
+      // Las coordenadas del vértice son las del hex * 2 + offset
+      const hexQ = hex.position.q * 2;
+      const hexR = hex.position.r * 2;
+      const hexS = hex.position.s * 2;
+      
+      const vertexQ = hexQ + corner.offset.q;
+      const vertexR = hexR + corner.offset.r;
+      const vertexS = hexS + corner.offset.s;
+      
+      const vertexId = `v_${vertexQ}_${vertexR}_${vertexS}`;
+      
+      // Solo agregar si no existe (múltiples hexágonos comparten vértices)
+      if (!vertexPositions.has(vertexId)) {
+        vertexPositions.set(vertexId, { x: x + corner.dx, y: y + corner.dy });
+      }
     });
   });
 
@@ -335,13 +352,14 @@ export function CatanBoardWithBuildings({ gameState }: CatanBoardWithBuildingsPr
               .filter((edge) => edge.road)
               .map((edge) => {
                 const [v1Id, v2Id] = edge.vertexIds;
-                const v1Key = Array.from(vertexPositions.keys()).find((k) => k.includes(v1Id.split('_')[1]));
-                const v2Key = Array.from(vertexPositions.keys()).find((k) => k.includes(v2Id.split('_')[1]));
+                const v1Pos = vertexPositions.get(v1Id);
+                const v2Pos = vertexPositions.get(v2Id);
                 
-                if (!v1Key || !v2Key) return null;
+                if (!v1Pos || !v2Pos) {
+                  console.warn(`⚠️ Road ${edge.id}: Cannot find positions for vertices ${v1Id} or ${v2Id}`);
+                  return null;
+                }
                 
-                const v1Pos = vertexPositions.get(v1Key)!;
-                const v2Pos = vertexPositions.get(v2Key)!;
                 const player = gameState.players.find((p) => p.id === edge.road!.playerId);
                 
                 return (
@@ -360,11 +378,12 @@ export function CatanBoardWithBuildings({ gameState }: CatanBoardWithBuildingsPr
             {gameState.board.vertices
               .filter((vertex) => vertex.building)
               .map((vertex) => {
-                // Aproximar posición del vértice (simplificado)
-                const vertexKey = Array.from(vertexPositions.keys())[gameState.board.vertices.indexOf(vertex)];
-                const pos = vertexPositions.get(vertexKey || '');
+                const pos = vertexPositions.get(vertex.id);
                 
-                if (!pos) return null;
+                if (!pos) {
+                  console.warn(`⚠️ Building at ${vertex.id}: Cannot find position`);
+                  return null;
+                }
 
                 const player = gameState.players.find((p) => p.id === vertex.building!.playerId);
                 const color = PLAYER_COLORS[player?.color || 'white'] || '#ffffff';
