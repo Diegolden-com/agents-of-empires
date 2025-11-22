@@ -24,7 +24,7 @@ contract GameVRFConsumer is VRFConsumerBaseV2Plus {
 
     uint32 public callbackGasLimit = 300_000;
     uint16 public requestConfirmations = 0;
-    uint32 public numWords = 4; 
+    uint32 public numWords = 7;  // Need 7 random words: companies, models, play order, board 
     mapping(uint256 => uint256) public gameRequest;
 
     event RandomRequested(uint256 requestId, uint256 gameId);

@@ -2,91 +2,127 @@
 pragma solidity ^0.8.20;
 
 import "./GameVRFConsumer.sol";
-import "@evvm/testnet-contracts/interfaces/IEvvm.sol";
-import "@evvm/testnet-contracts/library/SignatureRecover.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract GameController {
     address public owner;
     GameVRFConsumer public vrf;
+    address public creWorkflow;
 
     uint256 public constant MIN_DEPOSIT = 0.0001 ether;
     uint256 public gameCounter;
 
     // ----------------------
-    // ENUMS
+    // ENUMS & CONSTANTS
     // ----------------------
-    enum LLMModel {
-        CLAUDE_HAIKU_4_5,
-        CLAUDE_SONNET_4_5,
-        GEMINI_25_FLASH_LITE,
-        GEMINI_25_FLASH,
-        GPT_5,
-        GPT_5_CODEX,
-        GROK_4,
-        GROK_4_FAST_REASONING,
-        DEEPSEEK_V32_EXP_THINKING,
-        DEEPSEEK_V32_EXP
+    enum GameStatus {
+        PENDING_RANDOMNESS,  // Waiting for VRF
+        ACTIVE,              // Game is being played
+        FINISHED,            // Game completed
+        CANCELLED            // Game was cancelled
     }
 
-    uint256 constant TOTAL_MODELS = 10;
+    enum Company {
+        ANTHROPIC,
+        GOOGLE,
+        OPENAI,
+        XAI,
+        DEEPSEEK
+    }
 
+    enum Resource {
+        WOOD,        // Wood
+        SHEEP,       // Sheep
+        WHEAT,       // Wheat
+        BRICK,       // Brick
+        ORE,         // Ore
+        DESERT       // Desert (no produce)
+    }
+
+    uint256 constant TOTAL_COMPANIES = 5;
+    uint256 constant PLAYERS_PER_GAME = 4;
+    uint256 constant TOTAL_HEXAGONS = 19;
+
+    // Model indices grouped by company
+    // ANTHROPIC: 0-1, GOOGLE: 2-3, OPENAI: 4-5, XAI: 6-7, DEEPSEEK: 8-9
     string[] public MODEL_NAMES = [
-        "anthropic/claude-haiku-4.5",
-        "anthropic/claude-sonnet-4.5",
-        "google/gemini-2.5-flash-lite",
-        "google/gemini-2.5-flash",
-        "openai/gpt-5",
-        "openai/gpt-5-codex",
-        "xai/grok-4",
-        "xai/grok-4-fast-reasoning",
-        "deepseek/deepseek-v3.2-exp-thinking",
-        "deepseek/deepseek-v3.2-exp"
+        "anthropic/claude-haiku-4.5",        // 0
+        "anthropic/claude-sonnet-4.5",       // 1
+        "google/gemini-2.5-flash-lite",      // 2
+        "google/gemini-2.5-flash",           // 3
+        "openai/gpt-5",                      // 4
+        "openai/gpt-5-codex",                // 5
+        "xai/grok-4",                        // 6
+        "xai/grok-4-fast-reasoning",         // 7
+        "deepseek/deepseek-v3.2-exp-thinking", // 8
+        "deepseek/deepseek-v3.2-exp"         // 9
     ];
 
-    enum Civilization {
-        BYZANTINES,
-        CHINESE,
-        BRITONS,
-        FRANKS,
-        MONGOLS,
-        AZTECS,
-        JAPANESE,
-        VIKINGS,
-        ARABIANS,
-        MAYANS
+    uint256 constant MODELS_PER_COMPANY = 2;
+
+    // ----------------------
+    // CATAN BOARD STRUCTS
+    // ----------------------
+    struct Hexagon {
+        Resource resource;
     }
 
-    uint256 constant TOTAL_CIVS = 10;
+    // ----------------------
+    // AI PLAYER STRUCT
+    // ----------------------
+    struct AIPlayer {
+        Company company;
+        uint8 modelIndex;    // Index in MODEL_NAMES array
+        uint8 playOrder;     // 1-4, play order in Catan
+    }
 
     // ----------------------
     // GAME STRUCT
     // ----------------------
     struct Game {
-        address player;
+        address bettor;      // Human player who places the bet
         uint256 deposit;
+        GameStatus status;
 
         bool randomReady;
 
-        LLMModel model1;
-        LLMModel model2;
+        // 4 AI players
+        AIPlayer[4] aiPlayers;
 
-        Civilization civ1;
-        Civilization civ2;
+        // Catan board - 19 hexagons
+        Hexagon[19] board;
+
+        // Which AI player the bettor chose (0-3)
+        uint8 bettorChoice;
 
         uint256 requestId;
+
+        // Game results
+        uint256 startTime;
+        uint256 endTime;
+        uint8 winner;        // 0 = no winner yet, 1-4 = AI player index who won
+
+        // TODO: Add reward distribution fields
+        // uint256 rewardAmount;
+        // bool rewardClaimed;
+        // uint256 houseRewardPool; // Pool for house wins
     }
 
     mapping(uint256 => Game) public games;
 
-    event GameStarted(uint256 indexed gameId, address indexed player, uint256 requestId);
+    event GameStarted(uint256 indexed gameId, address indexed bettor, uint8 bettorChoice, uint256 requestId);
     event GameRandomAssigned(
         uint256 indexed gameId,
-        LLMModel model1,
-        LLMModel model2,
-        Civilization civ1,
-        Civilization civ2
+        Company[4] companies,
+        uint8[4] modelIndices,
+        uint8[4] playOrder
     );
+    event GameActivated(uint256 indexed gameId);
+    event GameEnded(uint256 indexed gameId, uint8 winner, uint256 duration);
+    event CREWorkflowUpdated(address indexed oldWorkflow, address indexed newWorkflow);
+
+    // TODO: Add reward events
+    // event RewardDistributed(uint256 indexed gameId, address indexed winner, uint256 amount);
+    // event RewardClaimed(uint256 indexed gameId, address indexed player, uint256 amount);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "NOT_OWNER");
@@ -105,68 +141,43 @@ contract GameController {
     // ----------------------------------------------------------
     // START GAME
     // ----------------------------------------------------------
-    string public constant EVVM_ID = "1";
-
-    // ----------------------------------------------------------
-    // START GAME
-    // ----------------------------------------------------------
-    function startGame(bool useNativePayment)
+    /**
+     * @notice Start a new Catan game with 4 AI players
+     * @param bettorChoice Which AI player the bettor bets on (0-3)
+     * @return gameId The ID of the newly created game
+     */
+    function startGame(uint8 bettorChoice)
         external
         payable
         returns (uint256 gameId)
     {
-        return _startGame(msg.sender, useNativePayment, msg.value);
-    }
-
-    function startGameSigned(bool useNativePayment, bytes memory signature)
-        external
-        payable
-        returns (uint256 gameId)
-    {
-        // Reconstruct the message that was signed: "{EVVM_ID},startGame,{useNativePayment}"
-        string memory inputs = useNativePayment ? "true" : "false";
-        
-        // Verify signature and recover signer
-        // Message format: "{evvmID},{functionName},{inputs}"
-        address player = SignatureRecover.recoverSigner(
-            string.concat(EVVM_ID, ",startGame,", inputs),
-            signature
-        );
-        
-        require(player != address(0), "INVALID_SIGNATURE");
-        
-        return _startGame(player, useNativePayment, msg.value);
-    }
-
-    function _startGame(address player, bool useNativePayment, uint256 depositAmount)
-        internal
-        returns (uint256 gameId)
-    {
-        require(depositAmount >= MIN_DEPOSIT, "NOT_ENOUGH_ETH");
+        require(msg.value >= MIN_DEPOSIT, "NOT_ENOUGH_ETH");
+        require(bettorChoice < PLAYERS_PER_GAME, "INVALID_BETTOR_CHOICE");
 
         gameCounter++;
         gameId = gameCounter;
 
-        uint256 requestId = vrf.requestRandomWords(gameId, useNativePayment);
+        uint256 requestId = vrf.requestRandomWords(gameId, true);
 
-        games[gameId] = Game({
-            player: player,
-            deposit: depositAmount,
-            randomReady: false,
-            model1: LLMModel(0),
-            model2: LLMModel(0),
-            civ1: Civilization(0),
-            civ2: Civilization(0),
-            requestId: requestId
-        });
+        // Create game in storage
+        Game storage g = games[gameId];
+        g.bettor = msg.sender;
+        g.deposit = msg.value;
+        g.status = GameStatus.PENDING_RANDOMNESS;
+        g.randomReady = false;
+        g.bettorChoice = bettorChoice;
+        g.requestId = requestId;
+        g.startTime = block.timestamp;
+        g.endTime = 0;
+        g.winner = 0;
 
-        emit GameStarted(gameId, player, requestId);
+        emit GameStarted(gameId, msg.sender, bettorChoice, requestId);
     }
 
     // ----------------------------------------------------------
-    // CALLBACK FROM VRF
+    // CALLBACK FROM VRF (via GameVRFConsumer)
     // ----------------------------------------------------------
-    function fulfillRandomWords(
+    function receiveRandomWords(
         uint256 gameId,
         uint256 requestId,
         uint256[] calldata randomWords
@@ -175,143 +186,152 @@ contract GameController {
 
         Game storage g = games[gameId];
         require(g.requestId == requestId, "REQUEST_MISMATCH");
+        require(g.status == GameStatus.PENDING_RANDOMNESS, "INVALID_STATUS");
+        require(randomWords.length >= 7, "INSUFFICIENT_RANDOM_WORDS");
 
-        g.model1 = LLMModel(randomWords[0] % TOTAL_MODELS);
-        g.model2 = LLMModel(randomWords[1] % TOTAL_MODELS);
+        // Step 1: Determine which company to exclude (0-4)
+        uint8 excludedCompany = uint8(randomWords[0] % TOTAL_COMPANIES);
 
-        g.civ1 = Civilization(randomWords[2] % TOTAL_CIVS);
-        g.civ2 = Civilization(randomWords[3] % TOTAL_CIVS);
+        // Step 2: Get 4 selected companies
+        Company[4] memory selectedCompanies = _selectCompanies(excludedCompany);
+
+        // Step 3: Assign models to each AI player
+        uint8[4] memory modelIndices;
+        for (uint8 i = 0; i < PLAYERS_PER_GAME; i++) {
+            // Get base index for this company (each company has 2 models)
+            uint8 companyBaseIndex = uint8(uint8(selectedCompanies[i]) * uint8(MODELS_PER_COMPANY));
+            // Select one of the 2 models from this company
+            uint8 modelOffset = uint8(randomWords[i + 1] % MODELS_PER_COMPANY);
+            modelIndices[i] = companyBaseIndex + modelOffset;
+
+            g.aiPlayers[i].company = selectedCompanies[i];
+            g.aiPlayers[i].modelIndex = modelIndices[i];
+        }
+
+        // Step 4: Generate random play order (Fisher-Yates shuffle)
+        uint8[4] memory playOrder = _generatePlayOrder(randomWords[5]);
+        for (uint8 i = 0; i < PLAYERS_PER_GAME; i++) {
+            g.aiPlayers[i].playOrder = playOrder[i];
+        }
+
+        // Step 5: Generate random Catan board
+        _generateCatanBoard(gameId, randomWords[6]);
 
         g.randomReady = true;
+        g.status = GameStatus.ACTIVE;
 
-        emit GameRandomAssigned(
-            gameId,
-            g.model1,
-            g.model2,
-            g.civ1,
-            g.civ2
+        emit GameRandomAssigned(gameId, selectedCompanies, modelIndices, playOrder);
+        emit GameActivated(gameId);
+    }
+
+    /**
+     * @notice Select 4 companies from 5, excluding one
+     * @param excludedCompany The company to exclude (0-4)
+     * @return selectedCompanies Array of 4 selected companies
+     */
+    function _selectCompanies(uint8 excludedCompany)
+        internal
+        pure
+        returns (Company[4] memory selectedCompanies)
+    {
+        uint8 index = 0;
+        for (uint8 i = 0; i < TOTAL_COMPANIES; i++) {
+            if (i != excludedCompany) {
+                selectedCompanies[index] = Company(i);
+                index++;
+            }
+        }
+    }
+
+    /**
+     * @notice Generate random play order using Fisher-Yates shuffle
+     * @param seed Random seed for shuffle
+     * @return playOrder Array where each position contains the play order (1-4)
+     */
+    function _generatePlayOrder(uint256 seed)
+        internal
+        pure
+        returns (uint8[4] memory playOrder)
+    {
+        // Initialize array with values 1, 2, 3, 4
+        for (uint8 i = 0; i < PLAYERS_PER_GAME; i++) {
+            playOrder[i] = i + 1;
+        }
+
+        // Fisher-Yates shuffle
+        for (uint8 i = uint8(PLAYERS_PER_GAME) - 1; i > 0; i--) {
+            // Generate random index from 0 to i
+            uint8 j = uint8(uint256(keccak256(abi.encodePacked(seed, i))) % (i + 1));
+            // Swap
+            (playOrder[i], playOrder[j]) = (playOrder[j], playOrder[i]);
+        }
+    }
+
+    /**
+     * @notice Generate randomized Catan board with 19 hexagons
+     * Resources: 4 Wood, 4 Sheep, 4 Wheat, 3 Brick, 3 Ore, 1 Desert
+     */
+    function _generateCatanBoard(uint256 gameId, uint256 seed) internal {
+        Game storage g = games[gameId];
+
+        // Create base resource array
+        Resource[19] memory resources;
+        uint8 idx = 0;
+
+        // 4 Wood
+        for (uint8 i = 0; i < 4; i++) { resources[idx++] = Resource.WOOD; }
+        // 4 Sheep
+        for (uint8 i = 0; i < 4; i++) { resources[idx++] = Resource.SHEEP; }
+        // 4 Wheat
+        for (uint8 i = 0; i < 4; i++) { resources[idx++] = Resource.WHEAT; }
+        // 3 Brick
+        for (uint8 i = 0; i < 3; i++) { resources[idx++] = Resource.BRICK; }
+        // 3 Ore
+        for (uint8 i = 0; i < 3; i++) { resources[idx++] = Resource.ORE; }
+        // 1 Desert
+        resources[idx] = Resource.DESERT;
+
+        // Shuffle resources using Fisher-Yates
+        for (uint8 i = 18; i > 0; i--) {
+            uint8 j = uint8(uint256(keccak256(abi.encodePacked(seed, i))) % (i + 1));
+            (resources[i], resources[j]) = (resources[j], resources[i]);
+        }
+
+        // Assign to board
+        for (uint8 i = 0; i < TOTAL_HEXAGONS; i++) {
+            g.board[i].resource = resources[i];
+        }
+    }
+
+    // ----------------------------------------------------------
+    // END GAME
+    // ----------------------------------------------------------
+    /**
+     * @notice Ends an active Catan game and records the winner
+     * @dev Only callable by Chainlink CRE workflow or owner
+     * @param gameId The ID of the game to end
+     * @param _winner Winner indicator: 0 = no winner/cancelled, 1-4 = AI player index who won
+     */
+    function endGame(uint256 gameId, uint8 _winner) external {
+        require(
+            msg.sender == creWorkflow || msg.sender == owner,
+            "ONLY_CRE_OR_OWNER"
         );
+
+        Game storage g = games[gameId];
+        require(g.status == GameStatus.ACTIVE, "GAME_NOT_ACTIVE");
+        require(_winner <= PLAYERS_PER_GAME, "INVALID_WINNER");
+
+        g.status = GameStatus.FINISHED;
+        g.endTime = block.timestamp;
+        g.winner = _winner;
+
+        emit GameEnded(gameId, _winner, g.endTime - g.startTime);
+
+        // TODO: Implement reward distribution based on bettor's choice vs winner
     }
 
-    // ----------------------
-    // GAME STATE
-    // ----------------------
-    struct PlayerState {
-        uint256 wood;
-        uint256 brick;
-        uint256 sheep;
-        uint256 wheat;
-        uint256 ore;
-        uint256 victoryPoints;
-        uint256 settlements;
-        uint256 roads;
-    }
-
-    struct GameState {
-        address currentPlayer;
-        uint256 turnCount;
-        mapping(address => PlayerState) players;
-        // Simplified board: mapping location ID to owner
-        mapping(uint256 => address) settlementOwners;
-        mapping(uint256 => address) roadOwners;
-    }
-
-    mapping(uint256 => GameState) public gameStates;
-
-    event DiceRolled(uint256 indexed gameId, address indexed player, uint256 roll);
-    event SettlementPlaced(uint256 indexed gameId, address indexed player, uint256 location);
-    event RoadBuilt(uint256 indexed gameId, address indexed player, uint256 location);
-    event TurnEnded(uint256 indexed gameId, address indexed nextPlayer);
-
-    // ----------------------------------------------------------
-    // BASE ACTIONS
-    // ----------------------------------------------------------
-    function rollDice(uint256 gameId) external {
-        _rollDice(gameId, msg.sender);
-    }
-
-    function placeSettlement(uint256 gameId, uint256 location) external {
-        _placeSettlement(gameId, msg.sender, location);
-    }
-
-    function buildRoad(uint256 gameId, uint256 location) external {
-        _buildRoad(gameId, msg.sender, location);
-    }
-
-    function endTurn(uint256 gameId) external {
-        _endTurn(gameId, msg.sender);
-    }
-
-    // ----------------------------------------------------------
-    // SIGNED ACTIONS (Fisher Execution)
-    // ----------------------------------------------------------
-    function rollDiceSigned(uint256 gameId, bytes memory signature) external {
-        address player = _verifySignature("rollDice", string.concat(Strings.toString(gameId)), signature);
-        _rollDice(gameId, player);
-    }
-
-    function placeSettlementSigned(uint256 gameId, uint256 location, bytes memory signature) external {
-        string memory inputs = string.concat(Strings.toString(gameId), ",", Strings.toString(location));
-        address player = _verifySignature("placeSettlement", inputs, signature);
-        _placeSettlement(gameId, player, location);
-    }
-
-    function buildRoadSigned(uint256 gameId, uint256 location, bytes memory signature) external {
-        string memory inputs = string.concat(Strings.toString(gameId), ",", Strings.toString(location));
-        address player = _verifySignature("buildRoad", inputs, signature);
-        _buildRoad(gameId, player, location);
-    }
-
-    function endTurnSigned(uint256 gameId, bytes memory signature) external {
-        address player = _verifySignature("endTurn", string.concat(Strings.toString(gameId)), signature);
-        _endTurn(gameId, player);
-    }
-
-    // ----------------------------------------------------------
-    // INTERNAL LOGIC
-    // ----------------------------------------------------------
-    function _verifySignature(string memory functionName, string memory inputs, bytes memory signature) internal pure returns (address) {
-        address player = SignatureRecover.recoverSigner(
-            string.concat(EVVM_ID, ",", functionName, ",", inputs),
-            signature
-        );
-        require(player != address(0), "INVALID_SIGNATURE");
-        return player;
-    }
-
-    function _rollDice(uint256 gameId, address player) internal {
-        // In a real game, check turn and state
-        // For simplicity, we just request randomness
-        vrf.requestRandomWords(gameId, false); 
-        emit DiceRolled(gameId, player, 0); // Actual roll comes in callback
-    }
-
-    function _placeSettlement(uint256 gameId, address player, uint256 location) internal {
-        // Simplified cost: 1 Wood + 1 Brick
-        // require(gameStates[gameId].players[player].wood >= 1, "NO_WOOD");
-        // require(gameStates[gameId].players[player].brick >= 1, "NO_BRICK");
-        
-        // Deduct resources (commented out for easy testing without resource logic)
-        // gameStates[gameId].players[player].wood--;
-        // gameStates[gameId].players[player].brick--;
-        
-        gameStates[gameId].settlementOwners[location] = player;
-        gameStates[gameId].players[player].settlements++;
-        gameStates[gameId].players[player].victoryPoints++;
-        
-        emit SettlementPlaced(gameId, player, location);
-    }
-
-    function _buildRoad(uint256 gameId, address player, uint256 location) internal {
-        gameStates[gameId].roadOwners[location] = player;
-        gameStates[gameId].players[player].roads++;
-        emit RoadBuilt(gameId, player, location);
-    }
-
-    function _endTurn(uint256 gameId, address player) internal {
-        // Rotate turn logic here
-        emit TurnEnded(gameId, player);
-    }
+    // TODO: Implement reward system (calculateReward, claimReward, etc.)
 
     // ----------------------------------------------------------
     // VIEW
@@ -323,7 +343,64 @@ contract GameController {
     {
         return games[gameId];
     }
-    function getPlayerState(uint256 gameId, address player) external view returns (PlayerState memory) {
-        return gameStates[gameId].players[player];
+
+    function getGameStatus(uint256 gameId) external view returns (GameStatus) {
+        return games[gameId].status;
+    }
+
+    function getGameResult(uint256 gameId) external view returns (uint8 winner, uint256 duration) {
+        Game storage g = games[gameId];
+        winner = g.winner;
+        duration = g.endTime > 0 ? g.endTime - g.startTime : 0;
+    }
+
+    function getAIPlayers(uint256 gameId) external view returns (AIPlayer[4] memory) {
+        return games[gameId].aiPlayers;
+    }
+
+    function getAIPlayer(uint256 gameId, uint8 playerIndex)
+        external
+        view
+        returns (Company company, uint8 modelIndex, uint8 playOrder, string memory modelName)
+    {
+        require(playerIndex < PLAYERS_PER_GAME, "INVALID_PLAYER_INDEX");
+        AIPlayer memory player = games[gameId].aiPlayers[playerIndex];
+        return (player.company, player.modelIndex, player.playOrder, MODEL_NAMES[player.modelIndex]);
+    }
+
+    function getBettorChoice(uint256 gameId) external view returns (uint8) {
+        return games[gameId].bettorChoice;
+    }
+
+    function getBoard(uint256 gameId) external view returns (Hexagon[19] memory) {
+        return games[gameId].board;
+    }
+
+    function getHexagon(uint256 gameId, uint8 hexIndex)
+        external
+        view
+        returns (Resource resource)
+    {
+        require(hexIndex < TOTAL_HEXAGONS, "INVALID_HEX_INDEX");
+        return games[gameId].board[hexIndex].resource;
+    }
+
+    function getResourceName(Resource resource) external pure returns (string memory) {
+        if (resource == Resource.WOOD) return "Wood";
+        if (resource == Resource.SHEEP) return "Sheep";
+        if (resource == Resource.WHEAT) return "Wheat";
+        if (resource == Resource.BRICK) return "Brick";
+        if (resource == Resource.ORE) return "Ore";
+        return "Desert";
+    }
+
+    // ----------------------------------------------------------
+    // ADMIN
+    // ----------------------------------------------------------
+    function setCREWorkflow(address _creWorkflow) external onlyOwner {
+        require(_creWorkflow != address(0), "ZERO_ADDRESS");
+        address oldWorkflow = creWorkflow;
+        creWorkflow = _creWorkflow;
+        emit CREWorkflowUpdated(oldWorkflow, _creWorkflow);
     }
 }
