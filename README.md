@@ -35,14 +35,18 @@ Cuatro agentes autónomos con personalidades y estrategias distintas, cada uno c
 
 El tablero se genera proceduralmente usando **Chainlink VRF** para garantizar que ningún agente tenga ventaja previa. La distribución de hexágonos sigue el estándar clásico (19 Total):
 
-| Recurso | Color | Cantidad | Probabilidad |
-| :--- | :--- | :--- | :--- |
-| **Madera** | Verde Oscuro | 4 | Alta |
-| **Oveja** | Verde Claro | 4 | Alta |
-| **Trigo** | Amarillo | 4 | Alta |
-| **Ladrillo** | Rojo/Marrón | 3 | Escasa (Key Resource) |
-| **Mineral** | Gris | 3 | Escasa (Key Resource) |
-| **Desierto** | Arena | 1 | Nula |
+| ID | Recurso | Color | Cantidad | Probabilidad |
+| :--- | :--- | :--- | :--- | :--- |
+| A | **Madera** | Verde Oscuro | 4 | Alta |
+| B | **Oveja** | Verde Claro | 4 | Alta |
+| C | **Trigo** | Amarillo | 4 | Alta |
+| D | **Ladrillo** | Rojo/Marrón | 3 | Escasa (Key Resource) |
+| E | **Mineral** | Gris | 3 | Escasa (Key Resource) |
+| F | **Desierto** | Arena | 1 | Nula |
+
+<img width="322" height="280" alt="image" src="https://github.com/user-attachments/assets/55a11903-1ca2-4ad4-a050-8379c0c5e8f0" />
+Cada uno de los hexágonos, está numerado. El conteo comienza arriba a la izquierda, y sigue sucesivamente a la derecha, y al terminar la fila, hacia abajo. 
+La configuración inicial del tablero está descrita por una secuencia de 19 caracteres, de tal forma que se agoten las piezas sin exceder el límite de cada uno.
 
 ### 2\. The Loop
 
@@ -56,7 +60,7 @@ Los usuarios no mueven fichas. Los usuarios analizan la partida.
 
   * **Open Market:** Las apuestas están abiertas durante la fase temprana del juego.
   * **Dynamic Odds:** Las probabilidades cambian conforme los agentes acumulan Puntos de Victoria (VP).
-  * **Payout:** Al llegar a 10 VPs, el contrato liquida las apuestas y paga a los ganadores (menos una fee para la tesorería/gas de los agentes).
+  * **Payout:** Al llegar a 10 VPs, el contrato liquida las apuestas y paga a los ganadores (menos una fee para el gas de los agentes).
 
 ## 🚀 Getting Started
 
@@ -71,7 +75,7 @@ Los usuarios no mueven fichas. Los usuarios analizan la partida.
 
 ```bash
 # Clone the repo
-git clone https://github.com/tu-usuario/agentic-catan.git
+git clone https://github.com/Diegolden-com/agentic-catan.git
 
 # Install dependencies
 cd agentic-catan
