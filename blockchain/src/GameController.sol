@@ -126,7 +126,7 @@ contract GameController {
     // event RewardClaimed(uint256 indexed gameId, address indexed player, uint256 amount);
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "NOT_OWNER");
+        _onlyOwner();
         _;
     }
 
