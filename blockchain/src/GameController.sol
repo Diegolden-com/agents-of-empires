@@ -2,6 +2,9 @@
 pragma solidity ^0.8.20;
 
 import "./GameVRFConsumer.sol";
+import "@evvm/testnet-contracts/interfaces/IEvvm.sol";
+import "@evvm/testnet-contracts/library/SignatureRecover.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract GameController {
     address public owner;
@@ -102,12 +105,44 @@ contract GameController {
     // ----------------------------------------------------------
     // START GAME
     // ----------------------------------------------------------
+    string public constant EVVM_ID = "1";
+
+    // ----------------------------------------------------------
+    // START GAME
+    // ----------------------------------------------------------
     function startGame(bool useNativePayment)
         external
         payable
         returns (uint256 gameId)
     {
-        require(msg.value >= MIN_DEPOSIT, "NOT_ENOUGH_ETH");
+        return _startGame(msg.sender, useNativePayment, msg.value);
+    }
+
+    function startGameSigned(bool useNativePayment, bytes memory signature)
+        external
+        payable
+        returns (uint256 gameId)
+    {
+        // Reconstruct the message that was signed: "{EVVM_ID},startGame,{useNativePayment}"
+        string memory inputs = useNativePayment ? "true" : "false";
+        
+        // Verify signature and recover signer
+        // Message format: "{evvmID},{functionName},{inputs}"
+        address player = SignatureRecover.recoverSigner(
+            string.concat(EVVM_ID, ",startGame,", inputs),
+            signature
+        );
+        
+        require(player != address(0), "INVALID_SIGNATURE");
+        
+        return _startGame(player, useNativePayment, msg.value);
+    }
+
+    function _startGame(address player, bool useNativePayment, uint256 depositAmount)
+        internal
+        returns (uint256 gameId)
+    {
+        require(depositAmount >= MIN_DEPOSIT, "NOT_ENOUGH_ETH");
 
         gameCounter++;
         gameId = gameCounter;
@@ -115,8 +150,8 @@ contract GameController {
         uint256 requestId = vrf.requestRandomWords(gameId, useNativePayment);
 
         games[gameId] = Game({
-            player: msg.sender,
-            deposit: msg.value,
+            player: player,
+            deposit: depositAmount,
             randomReady: false,
             model1: LLMModel(0),
             model2: LLMModel(0),
@@ -125,7 +160,7 @@ contract GameController {
             requestId: requestId
         });
 
-        emit GameStarted(gameId, msg.sender, requestId);
+        emit GameStarted(gameId, player, requestId);
     }
 
     // ----------------------------------------------------------
@@ -158,6 +193,126 @@ contract GameController {
         );
     }
 
+    // ----------------------
+    // GAME STATE
+    // ----------------------
+    struct PlayerState {
+        uint256 wood;
+        uint256 brick;
+        uint256 sheep;
+        uint256 wheat;
+        uint256 ore;
+        uint256 victoryPoints;
+        uint256 settlements;
+        uint256 roads;
+    }
+
+    struct GameState {
+        address currentPlayer;
+        uint256 turnCount;
+        mapping(address => PlayerState) players;
+        // Simplified board: mapping location ID to owner
+        mapping(uint256 => address) settlementOwners;
+        mapping(uint256 => address) roadOwners;
+    }
+
+    mapping(uint256 => GameState) public gameStates;
+
+    event DiceRolled(uint256 indexed gameId, address indexed player, uint256 roll);
+    event SettlementPlaced(uint256 indexed gameId, address indexed player, uint256 location);
+    event RoadBuilt(uint256 indexed gameId, address indexed player, uint256 location);
+    event TurnEnded(uint256 indexed gameId, address indexed nextPlayer);
+
+    // ----------------------------------------------------------
+    // BASE ACTIONS
+    // ----------------------------------------------------------
+    function rollDice(uint256 gameId) external {
+        _rollDice(gameId, msg.sender);
+    }
+
+    function placeSettlement(uint256 gameId, uint256 location) external {
+        _placeSettlement(gameId, msg.sender, location);
+    }
+
+    function buildRoad(uint256 gameId, uint256 location) external {
+        _buildRoad(gameId, msg.sender, location);
+    }
+
+    function endTurn(uint256 gameId) external {
+        _endTurn(gameId, msg.sender);
+    }
+
+    // ----------------------------------------------------------
+    // SIGNED ACTIONS (Fisher Execution)
+    // ----------------------------------------------------------
+    function rollDiceSigned(uint256 gameId, bytes memory signature) external {
+        address player = _verifySignature("rollDice", string.concat(Strings.toString(gameId)), signature);
+        _rollDice(gameId, player);
+    }
+
+    function placeSettlementSigned(uint256 gameId, uint256 location, bytes memory signature) external {
+        string memory inputs = string.concat(Strings.toString(gameId), ",", Strings.toString(location));
+        address player = _verifySignature("placeSettlement", inputs, signature);
+        _placeSettlement(gameId, player, location);
+    }
+
+    function buildRoadSigned(uint256 gameId, uint256 location, bytes memory signature) external {
+        string memory inputs = string.concat(Strings.toString(gameId), ",", Strings.toString(location));
+        address player = _verifySignature("buildRoad", inputs, signature);
+        _buildRoad(gameId, player, location);
+    }
+
+    function endTurnSigned(uint256 gameId, bytes memory signature) external {
+        address player = _verifySignature("endTurn", string.concat(Strings.toString(gameId)), signature);
+        _endTurn(gameId, player);
+    }
+
+    // ----------------------------------------------------------
+    // INTERNAL LOGIC
+    // ----------------------------------------------------------
+    function _verifySignature(string memory functionName, string memory inputs, bytes memory signature) internal pure returns (address) {
+        address player = SignatureRecover.recoverSigner(
+            string.concat(EVVM_ID, ",", functionName, ",", inputs),
+            signature
+        );
+        require(player != address(0), "INVALID_SIGNATURE");
+        return player;
+    }
+
+    function _rollDice(uint256 gameId, address player) internal {
+        // In a real game, check turn and state
+        // For simplicity, we just request randomness
+        vrf.requestRandomWords(gameId, false); 
+        emit DiceRolled(gameId, player, 0); // Actual roll comes in callback
+    }
+
+    function _placeSettlement(uint256 gameId, address player, uint256 location) internal {
+        // Simplified cost: 1 Wood + 1 Brick
+        // require(gameStates[gameId].players[player].wood >= 1, "NO_WOOD");
+        // require(gameStates[gameId].players[player].brick >= 1, "NO_BRICK");
+        
+        // Deduct resources (commented out for easy testing without resource logic)
+        // gameStates[gameId].players[player].wood--;
+        // gameStates[gameId].players[player].brick--;
+        
+        gameStates[gameId].settlementOwners[location] = player;
+        gameStates[gameId].players[player].settlements++;
+        gameStates[gameId].players[player].victoryPoints++;
+        
+        emit SettlementPlaced(gameId, player, location);
+    }
+
+    function _buildRoad(uint256 gameId, address player, uint256 location) internal {
+        gameStates[gameId].roadOwners[location] = player;
+        gameStates[gameId].players[player].roads++;
+        emit RoadBuilt(gameId, player, location);
+    }
+
+    function _endTurn(uint256 gameId, address player) internal {
+        // Rotate turn logic here
+        emit TurnEnded(gameId, player);
+    }
+
     // ----------------------------------------------------------
     // VIEW
     // ----------------------------------------------------------
@@ -167,5 +322,8 @@ contract GameController {
         returns (Game memory)
     {
         return games[gameId];
+    }
+    function getPlayerState(uint256 gameId, address player) external view returns (PlayerState memory) {
+        return gameStates[gameId].players[player];
     }
 }
