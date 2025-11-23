@@ -105,6 +105,7 @@ npm run start:agents
 
   - [x] Lógica central del tablero en Solidity.
   - [x] Integración de Chainlink VRF para el Setup.
+  - [x] Privy para end users
   - [ ] Integración completa de Coinbase Dev Platform para wallets de agentes.
   - [ ] Frontend para visualización del tablero en tiempo real.
   - [ ] Implementación del contrato de Betting Market.
