@@ -8,6 +8,11 @@ type Config = {
 
 const onLogTrigger = (runtime: Runtime<Config>, log: EVMLog): string => {
   runtime.log(`Log detected from ${log.address} chain`);
+  runtime.log(`Log data: ${JSON.stringify(log.data)}`);
+  runtime.log(`Log topics: ${JSON.stringify(log.topics)}`);
+  runtime.log(`Log address: ${log.address}`);
+  runtime.log(`Log block number: ${log.blockNumber}`);
+  runtime.log(`Log block hash: ${log.blockHash}`);
   return "Log processed";
 };
 
