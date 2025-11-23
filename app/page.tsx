@@ -59,13 +59,14 @@ export default function AIBattlePage() {
   const [isStartingBattle, setIsStartingBattle] = useState(false);
   const [dbGame, setDbGame] = useState<any>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [isFinishing, setIsFinishing] = useState(false);
 
   const statusLabels: Record<string, string> = {
-    idle: 'Sin generar',
-    pending_vrf: 'VRF solicitado',
-    ready: 'Listo (on-chain)',
-    active: 'En batalla',
-    finished: 'Finalizado',
+    idle: 'Not generated',
+    pending_vrf: 'VRF requested',
+    ready: 'Ready (on-chain)',
+    active: 'In battle',
+    finished: 'Finished',
   };
 
   function toggleAgent(agentId: string) {
@@ -117,7 +118,7 @@ export default function AIBattlePage() {
 
     const parsedGameId = parseInt(blockchainGameId);
     if (Number.isNaN(parsedGameId)) {
-      setStatusError('Game ID inválido');
+      setStatusError('Invalid Game ID');
       return;
     }
 
@@ -137,7 +138,7 @@ export default function AIBattlePage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setStatusError(data?.error || 'No se pudo registrar el juego');
+        setStatusError(data?.error || 'Could not register the game');
         return;
       }
 
@@ -149,7 +150,7 @@ export default function AIBattlePage() {
       setGameStatus(data.data?.status || 'pending_vrf');
     } catch (error) {
       console.error('Register battle error:', error);
-      setStatusError(`Error registrando juego: ${error}`);
+      setStatusError(`Error registering game: ${error}`);
     } finally {
       setIsRegistering(false);
     }
@@ -160,12 +161,12 @@ export default function AIBattlePage() {
 
     const parsedGameId = parseInt(blockchainGameId);
     if (Number.isNaN(parsedGameId)) {
-      setStatusError('Game ID inválido');
+      setStatusError('Invalid Game ID');
       return;
     }
 
     if (gameStatus !== 'ready' && gameStatus !== 'active') {
-      setStatusError('El juego aún no está listo en la BDD. Espera a que Chainlink lo marque como listo.');
+      setStatusError('The game is not ready in the DB yet. Wait for Chainlink to mark it ready.');
       return;
     }
 
@@ -295,6 +296,80 @@ export default function AIBattlePage() {
     fetchStatus();
   }, [blockchainGameId]);
 
+  async function finishGameManually() {
+    if (!blockchainGameId) {
+      setStatusError('Invalid Game ID');
+      return;
+    }
+    const parsedGameId = parseInt(blockchainGameId, 10);
+    if (Number.isNaN(parsedGameId)) {
+      setStatusError('Invalid Game ID');
+      return;
+    }
+    if (!selectedAgents.length) {
+      setStatusError('Select agents before finishing the game');
+      return;
+    }
+
+    // Elegimos ganador: por más VP; si empate, random
+    let winnerIndex = 0;
+    if (gameState?.players?.length) {
+      const maxVP = Math.max(...gameState.players.map((p: any) => p.victoryPoints || 0));
+      const leaders = gameState.players
+        .map((p: any, idx: number) => ({ p, idx }))
+        .filter(({ p }: any) => (p.victoryPoints || 0) === maxVP);
+      const pick = leaders[Math.floor(Math.random() * leaders.length)];
+      winnerIndex = pick?.idx ?? 0;
+    }
+
+    const winnerAgentId = selectedAgents[winnerIndex] || selectedAgents[0];
+    if (!winnerAgentId) {
+      setStatusError('Could not determine the winning agent');
+      return;
+    }
+    const totalTurns = gameState?.turn || 0;
+    const winnerName = gameState?.players?.[winnerIndex]?.name || winnerAgentId || 'Desconocido';
+    const winnerVP = gameState?.players?.[winnerIndex]?.victoryPoints || 0;
+
+    setIsFinishing(true);
+    setStatusError(null);
+
+    try {
+      const res = await fetch('/api/game/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: parsedGameId,
+          winnerAgentId,
+          winnerIndex,
+          totalTurns,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setStatusError(data?.error || 'Could not finish the game');
+        return;
+      }
+
+      setGameStatus('finished');
+      setEvents(prev => [...prev, {
+        type: 'victory',
+        winner: {
+          name: winnerName,
+          victoryPoints: winnerVP,
+          agentName: winnerAgentId,
+        },
+        message: `Manually finished. Winner: ${winnerName}`,
+        gameState: gameState,
+      }]);
+    } catch (error) {
+      console.error('Error finishing game:', error);
+      setStatusError(`Error finishing: ${error}`);
+    } finally {
+      setIsFinishing(false);
+    }
+  }
+
   function getStrategyIcon(style: string) {
     switch (style) {
       case 'AGGRESSIVE_EXPANSION': return <Zap className="w-4 h-4" />;
@@ -328,7 +403,7 @@ export default function AIBattlePage() {
                 <CardHeader>
                   <CardTitle>Game Configuration</CardTitle>
                   <CardDescription>
-                    Configure blockchain game ID and select agents
+                    Configure the blockchain game ID and select agents
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -346,10 +421,10 @@ export default function AIBattlePage() {
                       min="1"
                     />
                     <p className="text-xs text-blue-600 mt-1">
-                      Este ID debe coincidir con el juego creado en la blockchain
+                      This ID must match the game created on-chain
                     </p>
                     <div className="flex items-center justify-between mt-2 text-xs text-blue-900">
-                      <span className="font-semibold">Estado en BDD</span>
+                      <span className="font-semibold">State in DB</span>
                       <Badge variant="outline">
                         {statusLabels[gameStatus] || gameStatus}
                       </Badge>
@@ -359,12 +434,12 @@ export default function AIBattlePage() {
                     )}
                     {gameStatus === 'pending_vrf' && (
                       <p className="text-xs text-blue-700 mt-1">
-                        Esperando confirmación de Chainlink CRE / VRF...
+                        Waiting for Chainlink CRE / VRF confirmation...
                       </p>
                     )}
                     {dbGame?.updated_at && (
                       <p className="text-[11px] text-blue-800 mt-1">
-                        Última actualización: {new Date(dbGame.updated_at).toLocaleTimeString()}
+                        Last update: {new Date(dbGame.updated_at).toLocaleTimeString()}
                       </p>
                     )}
                   </div>
@@ -750,6 +825,14 @@ export default function AIBattlePage() {
                     className="w-full"
                   >
                     Nueva Batalla
+                  </Button>
+                  <Button
+                    onClick={finishGameManually}
+                    disabled={!blockchainGameId || isFinishing}
+                    className="w-full"
+                    variant="destructive"
+                  >
+                    Terminar juego
                   </Button>
                 </div>
               </div>

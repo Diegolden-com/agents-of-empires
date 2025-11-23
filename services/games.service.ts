@@ -279,4 +279,26 @@ export class GamesService {
       created_at: new Date().toISOString(),
     });
   }
+
+  /**
+   * Obtiene el último juego finalizado (ordenado por finished_at desc)
+   */
+  async getLastFinishedGame(): Promise<Game | null> {
+    const { data, error } = await this.supabase
+      .from("games")
+      .select("*")
+      .eq("status", "finished")
+      .order("finished_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      throw new Error(`Error fetching last finished game: ${error.message}`);
+    }
+
+    return data as Game;
+  }
 }

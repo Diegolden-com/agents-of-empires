@@ -168,6 +168,21 @@ export async function POST(req: NextRequest) {
 
         // Game loop
         while (turnCount < maxTurns) {
+          // Si alguien ya finalizó el juego manualmente en la BDD, salimos
+          try {
+            const dbGame = await integrator.getGame(blockchainGameId);
+            if (dbGame?.status === 'finished') {
+              send({
+                type: 'victory',
+                message: 'Juego marcado como finalizado externamente.',
+                gameState: serializeGameState(gameState),
+              });
+              break;
+            }
+          } catch (statusError) {
+            console.error('Error checking game status:', statusError);
+          }
+
           // Check if someone won
           const hasWinner = gameState.players.some(p => p.victoryPoints >= 10);
           if (hasWinner) break;
@@ -424,10 +439,34 @@ export async function POST(req: NextRequest) {
               gameState: serializeGameState(gameState),
             });
           } else {
-            // Game ended prematurely with no real progress
+            // Game ended with insufficient progress: pick random winner to unblock flow
+            const topScore = leader.victoryPoints;
+            const topPlayers = gameState.players.filter(p => p.victoryPoints === topScore);
+            const randomWinner = topPlayers[Math.floor(Math.random() * topPlayers.length)];
+            const winnerIndex = gameState.players.indexOf(randomWinner);
+            const winnerAgent = agentConfigs[winnerIndex];
+
+            try {
+              await integrator.finishGame(
+                blockchainGameId,
+                agentIds[winnerIndex],
+                winnerIndex,
+                gameState.turn
+              );
+            } catch (dbError) {
+              console.error('⚠️ Error finishing game (random winner):', dbError);
+            }
+
             send({
-              type: 'error',
-              message: `Game ended after ${turnCount} turns with insufficient progress. Leader has only ${leader.victoryPoints} VP. The game may have encountered errors during setup.`,
+              type: 'victory',
+              winner: {
+                id: randomWinner.id,
+                name: randomWinner.name,
+                victoryPoints: randomWinner.victoryPoints,
+                agentName: winnerAgent?.name,
+              },
+              message: `Game ended after ${turnCount} turns without clear progress. Random winner: ${randomWinner.name}.`,
+              gameState: serializeGameState(gameState),
             });
           }
         } else {
@@ -480,4 +519,3 @@ function getVictoryMessage(agent: any): string {
   
   return victories[agent.id] || '¡Victoria!';
 }
-
