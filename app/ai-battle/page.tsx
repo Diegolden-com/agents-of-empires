@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Play, Zap, Brain, Shield, Sparkles, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { CatanBoardWithBuildings } from '@/components/catan-board-with-buildings';
 import { ResourceLog } from '@/components/resource-log';
+import { Navbar } from '@/components/navbar';
 
 // ✨ Configuraciones de LLM disponibles
 const LLM_OPTIONS: Record<string, { label: string; models: { value: string; label: string; cost: string }[] }> = {
@@ -184,7 +185,9 @@ export default function AIBattlePage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-green-50 p-8">
+    <>
+      <Navbar />
+      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-green-50 p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center">
@@ -581,6 +584,7 @@ export default function AIBattlePage() {
         )}
       </div>
     </main>
+    </>
   );
 }
 
