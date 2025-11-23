@@ -215,4 +215,78 @@ contract GameMoveServiceTest is Test {
             0, 0, false, ""
         );
     }
+    function test_MoveMultiple() public {
+        uint256 gameId = 1;
+        uint256 agentPrivateKey = 0xA11CE;
+        address agent = vm.addr(agentPrivateKey);
+        
+        GameMoveService.MoveData[] memory moves = new GameMoveService.MoveData[](2);
+        
+        // Move 1: Valid
+        moves[0] = _createMoveData(gameId, agent, agentPrivateKey, "BUILD_ROAD", abi.encode(uint8(1)), 100);
+        
+        // Move 2: Invalid (Used Nonce - reusing 100 would fail, so let's use 101 but make it invalid data)
+        // Actually, let's make it invalid by data to test partial failure
+        moves[1] = _createMoveData(gameId, agent, agentPrivateKey, "BUILD_ROAD", abi.encode(uint8(200)), 101); // 200 is invalid edge
+
+        (uint256 successful, uint256 failed, bool[] memory results) = service.moveMultiple(moves);
+        
+        assertEq(successful, 1, "Should have 1 successful move");
+        assertEq(failed, 1, "Should have 1 failed move");
+        assertTrue(results[0], "First move should succeed");
+        assertFalse(results[1], "Second move should fail");
+        
+        GameMoveService.Move[] memory recordedMoves = service.getMoves(gameId);
+        assertEq(recordedMoves.length, 1, "Should record 1 move");
+    }
+
+    function _createMoveData(
+        uint256 gameId,
+        address agent,
+        uint256 privateKey,
+        string memory moveType,
+        bytes memory data,
+        uint256 nonce
+    ) internal view returns (GameMoveService.MoveData memory) {
+        string memory dataHash = vm.toString(keccak256(data));
+        string memory message = string.concat(
+            vm.toString(gameId),
+            ",",
+            moveType,
+            ",",
+            dataHash,
+            ",",
+            vm.toString(nonce)
+        );
+
+        string memory fullMessage = string.concat(
+            "1337",
+            ",",
+            "recordMove",
+            ",",
+            message
+        );
+
+        bytes32 messageHash = keccak256(abi.encodePacked(
+            "\x19Ethereum Signed Message:\n",
+            vm.toString(bytes(fullMessage).length),
+            fullMessage
+        ));
+        
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, messageHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        return GameMoveService.MoveData({
+            gameId: gameId,
+            agent: agent,
+            moveType: moveType,
+            data: data,
+            nonce: nonce,
+            signature: signature,
+            priorityFee_EVVM: 0,
+            nonce_EVVM: 0,
+            priorityFlag_EVVM: false,
+            signature_EVVM: ""
+        });
+    }
 }

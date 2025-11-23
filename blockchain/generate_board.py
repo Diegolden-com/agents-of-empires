@@ -30,7 +30,7 @@ hex_map = {coords: i for i, coords in enumerate(hex_coords)}
 
 # Alternative:
 # Vertices are at (q + 1/3, r + 1/3) type offsets.
-# Let's use a "Vertex Map" to assign IDs.
+# Let's use a \"Vertex Map\" to assign IDs.
 # Key: tuple of sorted hex IDs touching this vertex?
 # Or Key: (q, r, corner_index 0-5)
 # But we need to normalize.
@@ -62,85 +62,44 @@ hex_edges = [[] for _ in range(19)]
 vertex_edges = [] # Will fill later
 edge_vertices = [] # Will fill later
 
-# Helper to normalize vertex
-# A vertex is shared by up to 3 hexes.
-# Let's represent a vertex by the set of hex coordinates it touches?
-# Or just use (q, r, corner) and a normalization function.
-# Normalization:
-# Corner 0 (Top) of (q,r) -> touches (q,r), (q,r-1), (q+1,r-1).
-#   Canonical: Min(HexCoords) + "BottomRight" of that one?
-#   Let's just use floating point coordinates for uniqueness.
-#   Center (q,r).
-#   Corner 0: (q, r-2/3) ? No.
-#   Let's use (x, y) with basis vectors.
-#   x = q + r/2
-#   y = r * sqrt(3)/2
-#   This is for drawing.
-#   For topology:
-#   Corner 0: (q, r, 0)
-#   Equivalences:
-#   (q, r, 0) == (q, r-1, 4) == (q+1, r-1, 2) ?
-#   Let's check neighbors again.
-#   Dir 0 is Top.
-#   Neighbor 0 is (q, r-1). Bottom-Left of (q, r-1) is 4. Correct.
-#   Neighbor 1 is (q+1, r-1). Bottom-Left of (q+1, r-1) is 4. Wait.
-#   Top-Right of (q,r) is 1.
-#   Neighbor 1 is (q+1, r-1). Bottom of (q+1, r-1) is 3.
-#   Neighbor 2 is (q+1, r). Top-Left of (q+1, r) is 5.
+# Helper to get vertex in cubic coordinates
+# This MUST match the logic in lib/board-generator.ts exactly!
+def get_canonical_vertex(q, r, corner_index):
+    """
+    Get vertex cubic coordinates for a hex corner.
+    Matches TypeScript getHexVertices() function.
+    """
+    # Double the hex coordinates (as in TypeScript)
+    hq = q * 2
+    hr = r * 2
+    hs = (-q - r) * 2  # s = -q - r
+    
+    # Corner offsets (matching TypeScript exactly)
+    offsets = [
+        (1, -1, 0),   # 0: Top (NE)
+        (1, 0, -1),   # 1: Top-right (E)
+        (0, 1, -1),   # 2: Bottom-right (SE)
+        (-1, 1, 0),   # 3: Bottom (SW)
+        (-1, 0, 1),   # 4: Bottom-left (W)
+        (0, -1, 1),   # 5: Top-left (NW)
+    ]
+    
+    offset = offsets[corner_index]
+    vq = hq + offset[0]
+    vr = hr + offset[1]
+    vs = hs + offset[2]
+    
+    # Return as tuple for use as dict key
+    return (vq, vr, vs)
 
-# Let's define equivalences map.
-# (q, r, c) -> canonical (q, r, c)
-def get_canonical_vertex(q, r, c):
-    candidates = []
-    # Self
-    candidates.append((q, r, c))
-    
-    if c == 0: # Top
-        candidates.append((q, r-1, 4)) # Bottom Left of Top Neighbor
-        candidates.append((q+1, r-1, 2)) # Bottom Right of Top-Right Neighbor? No.
-        # Neighbor 1 is (q+1, r-1). Its Bottom Left is 4.
-        # Let's trace carefully.
-        # Hex (0,0). Top is shared with (0,-1) Bottom-Left? No.
-        # (0,-1) is Top-Left neighbor? No.
-        # Neighbors:
-        # 0: (0, -1) [Top-Leftish in axial?] No, (0,-1) is +r axis? No.
-        # Axial: q is East, r is South-East.
-        # Neighbors:
-        # +q: East (1, 0)
-        # +r: South-East (0, 1)
-        # -q: West (-1, 0)
-        # -r: North-West (0, -1)
-        # +q-r: North-East (1, -1)
-        # -q+r: South-West (-1, 1)
-        
-        # Corners (0 is Top, clockwise):
-        # 0 (Top): Shared by (q,r), (0,-1) [NW], (1,-1) [NE]
-        #   (q, r, 0) == (q, r-1, 2) [SE corner of NW] == (q+1, r-1, 4) [SW corner of NE]
-        pass
-    # This is getting complicated.
-    # Simpler approach:
-    # Just generate points in 2D space.
-    # Hex center: C = q * (sqrt(3), 0) + r * (sqrt(3)/2, 1.5)
-    # Vertices are at distance 1 from C at angles 30, 90, 150...
-    # Round coordinates to epsilon to find unique ones.
-    import math
-    cx = q * math.sqrt(3) + r * math.sqrt(3)/2
-    cy = r * 1.5
-    
-    angle_deg = 30 + 60 * c # 30, 90, 150, 210, 270, 330
-    angle_rad = math.radians(angle_deg)
-    vx = cx + math.cos(angle_rad)
-    vy = cy + math.sin(angle_rad)
-    
-    # Round to avoid float issues
-    return (round(vx, 3), round(vy, 3))
 
-def get_canonical_edge(q, r, e):
-    # Edge e is between corner e and (e+1)%6
-    v1 = get_canonical_vertex(q, r, e)
-    v2 = get_canonical_vertex(q, r, (e+1)%6)
+def get_canonical_edge(q, r, edge_index):
+    """Get edge as a tuple of two vertex cubic coordinates."""
+    v1 = get_canonical_vertex(q, r, edge_index)
+    v2 = get_canonical_vertex(q, r, (edge_index + 1) % 6)
     # Sort to make canonical
     return tuple(sorted((v1, v2)))
+
 
 # Generate all
 for i, (q, r) in enumerate(hex_coords):
@@ -167,7 +126,7 @@ for i, (q, r) in enumerate(hex_coords):
 num_vertices = next_vertex_id
 num_edges = next_edge_id
 
-# print(f"Vertices: {num_vertices}, Edges: {num_edges}")
+# print(f\"Vertices: {num_vertices}, Edges: {num_edges}\")
 # Should be 54 and 72 for standard board.
 
 vertex_edges_map = [set() for _ in range(num_vertices)]
@@ -203,7 +162,7 @@ for e in range(num_edges):
                 edge_neighbors[e].add(other_e)
 
 # Output Solidity Code
-with open("src/BoardUtils.sol", "w") as f:
+with open("blockchain/src/BoardUtils.sol", "w") as f:
     f.write("// SPDX-License-Identifier: MIT\n")
     f.write("pragma solidity ^0.8.20;\n\n")
     f.write("import \"./IBoard.sol\";\n\n")
@@ -255,3 +214,72 @@ with open("src/BoardUtils.sol", "w") as f:
     f.write("        return [0,0];\n")
     f.write("    }\n")
     f.write("}\n")
+
+# Output TypeScript Code
+with open("lib/board-utils.ts", "w") as f:
+    f.write("// Ported from blockchain/src/BoardUtils.sol\n\n")
+    f.write("export const BoardUtils = {\n")
+    
+    # getHexagonVertices
+    f.write("    getHexagonVertices(hexId: number): number[] {\n")
+    f.write("        if (hexId === 0) return " + str(hex_vertices[0]) + ";\n")
+    for i in range(1, 19):
+        f.write(f"        if (hexId === {i}) return {hex_vertices[i]};\n")
+    f.write("        return [0, 0, 0, 0, 0, 0];\n")
+    f.write("    },\n\n")
+
+    # getHexagonEdges
+    f.write("    getHexagonEdges(hexId: number): number[] {\n")
+    f.write("        if (hexId === 0) return " + str(hex_edges[0]) + ";\n")
+    for i in range(1, 19):
+        f.write(f"        if (hexId === {i}) return {hex_edges[i]};\n")
+    f.write("        return [0, 0, 0, 0, 0, 0];\n")
+    f.write("    },\n\n")
+
+    # getAdjacentVertices
+    f.write("    getAdjacentVertices(vertexId: number): number[] {\n")
+    f.write("        if (vertexId === 0) return " + str(list(vertex_neighbors[0])) + ";\n")
+    for i in range(1, num_vertices):
+        f.write(f"        if (vertexId === {i}) return {list(vertex_neighbors[i])};\n")
+    f.write("        return [];\n")
+    f.write("    },\n\n")
+
+    # getAdjacentEdges
+    f.write("    getAdjacentEdges(edgeId: number): number[] {\n")
+    f.write("        if (edgeId === 0) return " + str(list(edge_neighbors[0])) + ";\n")
+    for i in range(1, num_edges):
+        f.write(f"        if (edgeId === {i}) return {list(edge_neighbors[i])};\n")
+    f.write("        return [];\n")
+    f.write("    },\n\n")
+
+    # getVertexEdges
+    f.write("    getVertexEdges(vertexId: number): number[] {\n")
+    f.write("        if (vertexId === 0) return " + str(list(vertex_edges_map[0])) + ";\n")
+    for i in range(1, num_vertices):
+        f.write(f"        if (vertexId === {i}) return {list(vertex_edges_map[i])};\n")
+    f.write("        return [];\n")
+    f.write("    }\n")
+    f.write("};\n")
+
+# Output Vertex Coordinates for board-generator.ts
+# This is the key piece: export the SAME vertex IDs with their cubic coordinates
+with open("lib/vertex-coordinates.ts", "w") as f:
+    f.write("// Auto-generated vertex coordinate mapping\n")
+    f.write("// This ensures Python and TypeScript use the SAME vertex IDs\n\n")
+    f.write("export interface VertexCoordinate {\n")
+    f.write("  id: number;\n")
+    f.write("  q: number;\n")
+    f.write("  r: number;\n")
+    f.write("  s: number;\n")
+    f.write("}\n\n")
+    f.write("export const VERTEX_COORDINATES: VertexCoordinate[] = [\n")
+    
+    # Create list of vertices sorted by ID
+    # vertices dict has (q, r, s) tuples as keys and IDs as values
+    vertex_list = [(vid, coord[0], coord[1], coord[2]) for coord, vid in vertices.items()]
+    vertex_list.sort(key=lambda x: x[0])  # Sort by ID
+    
+    for vid, q, r, s in vertex_list:
+        f.write(f"  {{ id: {vid}, q: {q}, r: {r}, s: {s} }},\n")
+    
+    f.write("];\n")

@@ -1,7 +1,7 @@
 {
-  "name": "catan-llm-game",
+  "name": "agents-of-catan",
   "version": "2.0.0",
-  "description": "Settlers of Catan - Next.js app where LLM agents compete",
+  "description": "Agents of Catan - Next.js app where LLM agents compete",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

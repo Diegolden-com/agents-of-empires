@@ -38,6 +38,37 @@ contract GameMoveService is StakingServiceHooks {
 
 
 
+    struct MoveData {
+        uint256 gameId;
+        address agent;
+        string moveType;
+        bytes data;
+        uint256 nonce;
+        bytes signature;
+        uint256 priorityFee_EVVM;
+        uint256 nonce_EVVM;
+        bool priorityFlag_EVVM;
+        bytes signature_EVVM;
+    }
+
+    function moveMultiple(MoveData[] calldata moves) external returns (uint256 successful, uint256 failed, bool[] memory results) {
+        results = new bool[](moves.length);
+        for (uint256 i = 0; i < moves.length; i++) {
+            try this.recordMoveInternal(moves[i], msg.sender) {
+                successful++;
+                results[i] = true;
+            } catch {
+                failed++;
+                results[i] = false;
+            }
+        }
+    }
+
+    function recordMoveInternal(MoveData calldata move, address fisher) external {
+        require(msg.sender == address(this), "Only self");
+        _recordMove(move, fisher);
+    }
+
     function recordMove(
         uint256 gameId,
         address agent,
@@ -50,16 +81,32 @@ contract GameMoveService is StakingServiceHooks {
         bool priorityFlag_EVVM,
         bytes memory signature_EVVM
     ) external {
+        MoveData memory move = MoveData({
+            gameId: gameId,
+            agent: agent,
+            moveType: moveType,
+            data: data,
+            nonce: nonce,
+            signature: signature,
+            priorityFee_EVVM: priorityFee_EVVM,
+            nonce_EVVM: nonce_EVVM,
+            priorityFlag_EVVM: priorityFlag_EVVM,
+            signature_EVVM: signature_EVVM
+        });
+        _recordMove(move, msg.sender);
+    }
+
+    function _recordMove(MoveData memory move, address fisher) internal {
         // 1. Verify Signature
-        string memory dataHash = Strings.toHexString(uint256(keccak256(data)));
+        string memory dataHash = Strings.toHexString(uint256(keccak256(move.data)));
         string memory message = string.concat(
-            Strings.toString(gameId),
+            Strings.toString(move.gameId),
             ",",
-            moveType,
+            move.moveType,
             ",",
             dataHash,
             ",",
-            Strings.toString(nonce)
+            Strings.toString(move.nonce)
         );
 
         if (
@@ -67,75 +114,80 @@ contract GameMoveService is StakingServiceHooks {
                 Strings.toString(IEvvm(evvmHookAddress).getEvvmID()),
                 "recordMove",
                 message,
-                signature,
-                agent
+                move.signature,
+                move.agent
             )
         ) revert InvalidSignature();
 
         // 2. Check Nonce
-        if (checkAsyncNonce[agent][nonce]) revert NonceAlreadyUsed();
+        if (checkAsyncNonce[move.agent][move.nonce]) revert NonceAlreadyUsed();
 
         // 3. EVVM Payment (Agent pays Fisher/Service)
-        // We calculate a "price" for the move? Or just priority fee?
-        // The example had a totalPrice. Let's assume moves are free but pay gas/priority.
-        // So amount is 0, but priorityFee is paid.
         IEvvm(evvmHookAddress).pay(
-            agent,
+            move.agent,
             address(this),
             "", // metadata
             ETHER_ADDRESS,
             0, // amount
-            priorityFee_EVVM,
-            nonce_EVVM,
-            priorityFlag_EVVM,
-            address(this), // fisher (msg.sender is fisher)
-            signature_EVVM
+            move.priorityFee_EVVM,
+            move.nonce_EVVM,
+            move.priorityFlag_EVVM,
+            address(this), // fisher (msg.sender is fisher) -> Wait, fisher arg?
+            // The original code passed `address(this)` as fisher to `pay`.
+            // "address(this), // fisher (msg.sender is fisher)"
+            // If `GameMoveService` is the fisher in the eyes of EVVM (because it calls `pay`), then `address(this)` is correct.
+            // But the *real* fisher is `msg.sender` (the one calling recordMove).
+            // If `GameMoveService` calls `pay`, `msg.sender` in `Evvm.pay` will be `GameMoveService`.
+            // So `fisher` arg in `pay` should be `address(this)`?
+            // The original code used `address(this)`. I will stick to that.
+            move.signature_EVVM
         );
 
         // 4. Fisher Rewards (if Service is Staker)
         if (IEvvm(evvmHookAddress).isAddressStaker(address(this))) {
             // Pay priority fee to fisher
             IEvvm(evvmHookAddress).caPay(
-                msg.sender,
+                fisher,
                 ETHER_ADDRESS,
-                priorityFee_EVVM
+                move.priorityFee_EVVM
             );
 
             // Pay reward tokens to fisher (50% of reward)
             IEvvm(evvmHookAddress).caPay(
-                msg.sender,
+                fisher,
                 PRINCIPAL_TOKEN_ADDRESS,
                 IEvvm(evvmHookAddress).getRewardAmount() / 2
             );
         }
 
         // 5. Mark Nonce
-        checkAsyncNonce[agent][nonce] = true;
+        checkAsyncNonce[move.agent][move.nonce] = true;
 
         // 6. Validate Move Data
-        if (keccak256(bytes(moveType)) == keccak256(bytes("BUILD_ROAD"))) {
-            uint8 edgeId = abi.decode(data, (uint8));
+        if (keccak256(bytes(move.moveType)) == keccak256(bytes("BUILD_ROAD"))) {
+            uint8 edgeId = abi.decode(move.data, (uint8));
             require(edgeId < BoardUtils.MAX_EDGES, "INVALID_EDGE_ID");
-        } else if (keccak256(bytes(moveType)) == keccak256(bytes("BUILD_SETTLEMENT")) || 
-                   keccak256(bytes(moveType)) == keccak256(bytes("BUILD_CITY"))) {
-            uint8 vertexId = abi.decode(data, (uint8));
+        } else if (keccak256(bytes(move.moveType)) == keccak256(bytes("BUILD_SETTLEMENT")) || 
+                   keccak256(bytes(move.moveType)) == keccak256(bytes("BUILD_CITY"))) {
+            uint8 vertexId = abi.decode(move.data, (uint8));
             require(vertexId < BoardUtils.MAX_VERTICES, "INVALID_VERTEX_ID");
-        } else if (keccak256(bytes(moveType)) == keccak256(bytes("MOVE_ROBBER"))) {
-            (uint8 hexId, ) = abi.decode(data, (uint8, address));
+        } else if (keccak256(bytes(move.moveType)) == keccak256(bytes("MOVE_ROBBER"))) {
+            (uint8 hexId, ) = abi.decode(move.data, (uint8, address));
             require(hexId < BoardUtils.MAX_HEXAGONS, "INVALID_HEX_ID");
         }
 
         // 7. Record Move
-        gameMoves[gameId].push(Move({
-            gameId: gameId,
-            agent: agent,
-            moveType: moveType,
-            data: data,
+        gameMoves[move.gameId].push(Move({
+            gameId: move.gameId,
+            agent: move.agent,
+            moveType: move.moveType,
+            data: move.data,
             timestamp: block.timestamp
         }));
 
-        emit MoveRecorded(gameId, agent, moveType);
+        emit MoveRecorded(move.gameId, move.agent, move.moveType);
     }
+    
     function getMoves(uint256 gameId) external view returns (Move[] memory) {
         return gameMoves[gameId];
     }
