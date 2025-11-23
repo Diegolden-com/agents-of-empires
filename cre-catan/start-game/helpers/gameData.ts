@@ -20,6 +20,37 @@ type Config = {
   gameControllerAddress: string;
 };
 
+// Enums from GameController.sol
+const COMPANY_NAMES = [
+  "ANTHROPIC",  // 0
+  "GOOGLE",     // 1
+  "OPENAI",     // 2
+  "XAI",        // 3
+  "DEEPSEEK"    // 4
+];
+
+const RESOURCE_NAMES = [
+  "WOOD",    // 0
+  "SHEEP",   // 1
+  "WHEAT",   // 2
+  "BRICK",   // 3
+  "ORE",     // 4
+  "DESERT"   // 5
+];
+
+const MODEL_NAMES = [
+  "anthropic/claude-haiku-4.5",        // 0
+  "anthropic/claude-sonnet-4.5",       // 1
+  "google/gemini-2.5-flash-lite",      // 2
+  "google/gemini-2.5-flash",           // 3
+  "openai/gpt-5",                      // 4
+  "openai/gpt-5-codex",                // 5
+  "xai/grok-4",                        // 6
+  "xai/grok-4-fast-reasoning",         // 7
+  "deepseek/deepseek-v3.2-exp-thinking", // 8
+  "deepseek/deepseek-v3.2-exp"         // 9
+];
+
 // Catan board positions mapping (standard 19-hex layout)
 const BOARD_POSITIONS = [
   "Row 1 - Position 1 (Top)",
@@ -73,13 +104,16 @@ export type GamePayload = {
   aiPlayers: Array<{
     index: number;
     company: number;
+    companyName: string;
     modelIndex: number;
+    modelName: string;
     playOrder: number;
   }>;
   board: Array<{
     index: number;
     position: string;
     resource: number;
+    resourceName: string;
   }>;
 };
 
@@ -153,13 +187,16 @@ export const readGameFromBlockchain = async (
       aiPlayers: result.aiPlayers.map((player, index) => ({
         index,
         company: player.company,
+        companyName: COMPANY_NAMES[player.company] || "UNKNOWN",
         modelIndex: player.modelIndex,
+        modelName: MODEL_NAMES[player.modelIndex] || "UNKNOWN",
         playOrder: player.playOrder,
       })),
       board: result.board.map((hexagon, index) => ({
         index,
         position: BOARD_POSITIONS[index],
         resource: hexagon.resource,
+        resourceName: RESOURCE_NAMES[hexagon.resource] || "UNKNOWN",
       })),
     };
 
@@ -196,8 +233,8 @@ const logGameData = (runtime: Runtime<Config>, gamePayload: GamePayload) => {
   runtime.log("-".repeat(50));
   gamePayload.aiPlayers.forEach((player) => {
     runtime.log(`Player ${player.index}:`);
-    runtime.log(`  Company: ${player.company}`);
-    runtime.log(`  Model Index: ${player.modelIndex}`);
+    runtime.log(`  Company: ${player.companyName} (${player.company})`);
+    runtime.log(`  Model: ${player.modelName} (Index: ${player.modelIndex})`);
     runtime.log(`  Play Order: ${player.playOrder}`);
   });
 
@@ -207,7 +244,7 @@ const logGameData = (runtime: Runtime<Config>, gamePayload: GamePayload) => {
   runtime.log("-".repeat(50));
   gamePayload.board.forEach((hexagon) => {
     runtime.log(
-      `[${hexagon.index}] ${hexagon.position} - Resource: ${hexagon.resource}`
+      `[${hexagon.index}] ${hexagon.position} - ${hexagon.resourceName} (${hexagon.resource})`
     );
   });
 

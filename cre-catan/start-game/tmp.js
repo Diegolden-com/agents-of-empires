@@ -16934,6 +16934,33 @@ function decodeTopic({ param, value: value2 }) {
 var zeroAddress = "0x0000000000000000000000000000000000000000";
 init_decodeFunctionResult();
 init_encodeFunctionData();
+var COMPANY_NAMES = [
+  "ANTHROPIC",
+  "GOOGLE",
+  "OPENAI",
+  "XAI",
+  "DEEPSEEK"
+];
+var RESOURCE_NAMES = [
+  "WOOD",
+  "SHEEP",
+  "WHEAT",
+  "BRICK",
+  "ORE",
+  "DESERT"
+];
+var MODEL_NAMES = [
+  "anthropic/claude-haiku-4.5",
+  "anthropic/claude-sonnet-4.5",
+  "google/gemini-2.5-flash-lite",
+  "google/gemini-2.5-flash",
+  "openai/gpt-5",
+  "openai/gpt-5-codex",
+  "xai/grok-4",
+  "xai/grok-4-fast-reasoning",
+  "deepseek/deepseek-v3.2-exp-thinking",
+  "deepseek/deepseek-v3.2-exp"
+];
 var BOARD_POSITIONS = [
   "Row 1 - Position 1 (Top)",
   "Row 1 - Position 2",
@@ -17018,13 +17045,16 @@ var readGameFromBlockchain = async (runtime2, gameId) => {
       aiPlayers: result.aiPlayers.map((player, index) => ({
         index,
         company: player.company,
+        companyName: COMPANY_NAMES[player.company] || "UNKNOWN",
         modelIndex: player.modelIndex,
+        modelName: MODEL_NAMES[player.modelIndex] || "UNKNOWN",
         playOrder: player.playOrder
       })),
       board: result.board.map((hexagon, index) => ({
         index,
         position: BOARD_POSITIONS[index],
-        resource: hexagon.resource
+        resource: hexagon.resource,
+        resourceName: RESOURCE_NAMES[hexagon.resource] || "UNKNOWN"
       }))
     };
     logGameData(runtime2, gamePayload);
@@ -17054,8 +17084,8 @@ var logGameData = (runtime2, gamePayload) => {
   runtime2.log("-".repeat(50));
   gamePayload.aiPlayers.forEach((player) => {
     runtime2.log(`Player ${player.index}:`);
-    runtime2.log(`  Company: ${player.company}`);
-    runtime2.log(`  Model Index: ${player.modelIndex}`);
+    runtime2.log(`  Company: ${player.companyName} (${player.company})`);
+    runtime2.log(`  Model: ${player.modelName} (Index: ${player.modelIndex})`);
     runtime2.log(`  Play Order: ${player.playOrder}`);
   });
   runtime2.log(`
@@ -17063,7 +17093,7 @@ var logGameData = (runtime2, gamePayload) => {
   runtime2.log("BOARD (19 Hexagons):");
   runtime2.log("-".repeat(50));
   gamePayload.board.forEach((hexagon) => {
-    runtime2.log(`[${hexagon.index}] ${hexagon.position} - Resource: ${hexagon.resource}`);
+    runtime2.log(`[${hexagon.index}] ${hexagon.position} - ${hexagon.resourceName} (${hexagon.resource})`);
   });
   runtime2.log(`
 ` + "=".repeat(50));
