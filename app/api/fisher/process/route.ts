@@ -1,15 +1,29 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { ethers } from 'ethers';
+import type { Database } from '@/app/utils/supabase/database.types';
 
 const ABI = [
     "function recordMove(uint256 gameId, address agent, string moveType, bytes data, uint256 nonce, bytes signature, uint256 priorityFee_EVVM, uint256 nonce_EVVM, bool priorityFlag_EVVM, bytes signature_EVVM) external"
 ];
 
-export async function POST() {
+// Default batch size for processing moves
+const DEFAULT_BATCH_SIZE = 10;
+
+type GameMove = Database['public']['Tables']['game_moves']['Row'];
+
+export async function POST(request: Request) {
     try {
+        // Parse query parameters
+        const { searchParams } = new URL(request.url);
+        const gameIdParam = searchParams.get('game_id');
+        const batchSizeParam = searchParams.get('batch_size');
+
+        const gameId = gameIdParam ? parseInt(gameIdParam, 10) : null;
+        const batchSize = batchSizeParam ? parseInt(batchSizeParam, 10) : DEFAULT_BATCH_SIZE;
+
         // Initialize Supabase client
-        const supabase = createClient(
+        const supabase = createClient<Database>(
             process.env.SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_KEY!
         );
@@ -24,14 +38,22 @@ export async function POST() {
             wallet
         );
 
-        console.log("Checking for pending moves...");
+        console.log("Checking for pending moves...", gameId ? `for game ${gameId}` : 'across all games');
 
-        // Fetch one pending move
-        const { data: moves, error } = await supabase
+        // Build query with optional game_id filter
+        let query = supabase
             .from('game_moves')
             .select('*')
             .eq('status', 'pending')
-            .limit(1);
+            .order('created_at', { ascending: true })
+            .limit(batchSize);
+
+        // Add game_id filter if provided
+        if (gameId !== null) {
+            query = query.eq('game_id', gameId);
+        }
+
+        const { data: moves, error } = await query;
 
         if (error) {
             console.error("Error fetching moves:", error);
@@ -44,81 +66,105 @@ export async function POST() {
         if (!moves || moves.length === 0) {
             return NextResponse.json({
                 message: 'No pending moves to process',
-                processed: false
+                gameId: gameId,
+                processed: 0,
+                results: []
             });
         }
 
-        const move = moves[0];
-        console.log(`Processing move ${move.id} for game ${move.game_id}`);
+        console.log(`Processing ${moves.length} move(s) in batch`);
 
-        // Mark as processing
-        await supabase
-            .from('game_moves')
-            .update({ status: 'processing', updated_at: new Date().toISOString() })
-            .eq('id', move.id);
+        // Process moves sequentially to maintain nonce order
+        const results: Array<{
+            moveId: string;
+            gameId: number;
+            success: boolean;
+            txHash?: string;
+            error?: string;
+        }> = [];
 
-        try {
-            // Submit to blockchain
-            const tx = await contract.recordMove(
-                move.game_id,
-                move.agent,
-                move.move_type,
-                move.data,
-                move.nonce,
-                move.signature,
-                move.priority_fee_evvm,
-                move.nonce_evvm,
-                move.priority_flag_evvm,
-                move.signature_evvm || "0x"
-            );
+        for (const move of moves) {
+            console.log(`Processing move ${move.id} for game ${move.game_id}`);
 
-            console.log(`Transaction submitted: ${tx.hash}`);
+            // Mark as processing
+            await supabase
+                .from('game_moves')
+                .update({ status: 'processing', updated_at: new Date().toISOString() })
+                .eq('id', move.id);
 
-            // Wait for confirmation
-            const receipt = await tx.wait();
+            try {
+                // Submit to blockchain
+                const tx = await contract.recordMove(
+                    move.game_id,
+                    move.agent,
+                    move.move_type,
+                    move.data,
+                    move.nonce,
+                    move.signature,
+                    move.priority_fee_evvm,
+                    move.nonce_evvm,
+                    move.priority_flag_evvm,
+                    move.signature_evvm || "0x"
+                );
 
-            if (receipt.status === 1) {
-                console.log(`Transaction confirmed: ${tx.hash}`);
+                console.log(`Transaction submitted: ${tx.hash}`);
+
+                // Wait for confirmation
+                const receipt = await tx.wait();
+
+                if (receipt.status === 1) {
+                    console.log(`Transaction confirmed: ${tx.hash}`);
+                    await supabase
+                        .from('game_moves')
+                        .update({
+                            status: 'completed',
+                            tx_hash: tx.hash,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', move.id);
+
+                    results.push({
+                        moveId: move.id,
+                        gameId: move.game_id,
+                        success: true,
+                        txHash: tx.hash
+                    });
+                } else {
+                    throw new Error("Transaction reverted");
+                }
+
+            } catch (err: any) {
+                console.error(`Error processing move ${move.id}:`, err);
                 await supabase
                     .from('game_moves')
                     .update({
-                        status: 'completed',
-                        tx_hash: tx.hash,
+                        status: 'failed',
                         updated_at: new Date().toISOString()
                     })
                     .eq('id', move.id);
 
-                return NextResponse.json({
-                    success: true,
-                    message: 'Move processed successfully',
+                results.push({
                     moveId: move.id,
-                    txHash: tx.hash,
-                    processed: true
+                    gameId: move.game_id,
+                    success: false,
+                    error: err.message
                 });
-            } else {
-                throw new Error("Transaction reverted");
             }
-
-        } catch (err: any) {
-            console.error("Error processing move:", err);
-            await supabase
-                .from('game_moves')
-                .update({
-                    status: 'failed',
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', move.id);
-
-            return NextResponse.json(
-                {
-                    error: 'Failed to process move',
-                    details: err.message,
-                    moveId: move.id,
-                    processed: false
-                },
-                { status: 500 }
-            );
         }
+
+        // Calculate statistics
+        const successCount = results.filter(r => r.success).length;
+        const failedCount = results.filter(r => !r.success).length;
+
+        return NextResponse.json({
+            success: successCount > 0,
+            message: `Batch processing completed: ${successCount} succeeded, ${failedCount} failed`,
+            gameId: gameId,
+            processed: results.length,
+            successCount,
+            failedCount,
+            results
+        });
 
     } catch (error: any) {
         console.error("Fisher API error:", error);
