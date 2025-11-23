@@ -3,10 +3,13 @@ import { ChainGamePayload, Game, GameInsert, GameUpdate } from "@/interface/Game
 import { getAgentAddress } from "./agentSigner.service";
 
 export class GamesService {
-  private supabase;
+  private _supabase: ReturnType<typeof createClient> | null = null;
 
-  constructor() {
-    this.supabase = createClient();
+  private get supabase() {
+    if (!this._supabase) {
+      this._supabase = createClient();
+    }
+    return this._supabase;
   }
 
   /**

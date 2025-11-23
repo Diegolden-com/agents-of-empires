@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { GamesService } from "@/services/games.service";
 import { ChainGamePayload } from "@/interface/Game";
 
-const gamesService = new GamesService();
-
 export async function POST(request: NextRequest) {
+  const gamesService = new GamesService();
   try {
     const payload = (await request.json()) as ChainGamePayload;
 

@@ -2,10 +2,13 @@ import { createClient } from "@/app/utils/supabase/client";
 import { GameMove, GameMoveInsert } from "@/interface/GameMoves";
 
 export class GameMovesService {
-  private supabase;
+  private _supabase: ReturnType<typeof createClient> | null = null;
 
-  constructor() {
-    this.supabase = createClient();
+  private get supabase() {
+    if (!this._supabase) {
+      this._supabase = createClient();
+    }
+    return this._supabase;
   }
 
   async getGameMovesByGameId(gameId: number): Promise<GameMove[]> {

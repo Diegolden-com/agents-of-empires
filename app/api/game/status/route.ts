@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GamesService } from "@/services/games.service";
 
-const gamesService = new GamesService();
-
 export async function GET(request: NextRequest) {
+  const gamesService = new GamesService();
   const gameIdParam = request.nextUrl.searchParams.get("gameId");
 
   if (!gameIdParam) {

@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { GameMovesService } from "@/services/gameMoves.service";
 import { GameMoveInsert } from "@/interface/GameMoves";
 
-const gameMovesService = new GameMovesService();
-
 export async function GET(request: NextRequest) {
+  const gameMovesService = new GameMovesService();
   try {
     const searchParams = request.nextUrl.searchParams;
     const gameId = searchParams.get("gameId");
@@ -41,6 +40,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const gameMovesService = new GameMovesService();
   try {
     const body = await request.json();
 

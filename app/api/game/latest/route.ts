@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GamesService } from "@/services/games.service";
 
-const gamesService = new GamesService();
-
 // GET /api/game/latest -> último juego finalizado (finished)
 export async function GET(_req: NextRequest) {
+  const gamesService = new GamesService();
   try {
     const game = await gamesService.getLastFinishedGame();
 
