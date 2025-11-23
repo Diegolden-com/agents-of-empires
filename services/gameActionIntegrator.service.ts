@@ -110,20 +110,28 @@ export class GameActionIntegratorService {
     try {
       console.log(`\n🎮 Initializing game ${gameId} in database`);
 
-      // Verificar si el juego ya existe
-      const existingGame = await this.gamesService.getGameByGameId(gameId);
-      if (existingGame) {
-        console.log(`   ℹ️  Game ${gameId} already exists in database`);
-        return;
-      }
-
-      // Crear configuración de agentes
+      // Crear configuración de agentes (necesario tanto para nuevo como existente)
       const agents: AgentConfig[] = agentIds.map((agentId, index) => ({
         agentId,
         name: agentId.charAt(0).toUpperCase() + agentId.slice(1),
         address: getAgentAddress(agentId),
         playerIndex: index
       }));
+
+      // Verificar si el juego ya existe
+      const existingGame = await this.gamesService.getGameByGameId(gameId);
+      if (existingGame) {
+        console.log(`   ℹ️  Game ${gameId} already exists in database`);
+        // Aseguramos que quede marcado como activo antes de jugar
+        await this.gamesService.updateGame(gameId, {
+          status: 'active',
+          agents: existingGame.agents || (agents as any),
+          bettor_address: bettorAddress ?? existingGame.bettor_address,
+          bettor_choice: bettorChoice ?? existingGame.bettor_choice,
+          started_at: existingGame.started_at ?? new Date().toISOString(),
+        });
+        return;
+      }
 
       console.log(`   Agents:`);
       agents.forEach(agent => {

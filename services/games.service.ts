@@ -1,5 +1,6 @@
 import { createClient } from "@/app/utils/supabase/client";
-import { Game, GameInsert, GameUpdate } from "@/interface/Game";
+import { ChainGamePayload, Game, GameInsert, GameUpdate } from "@/interface/Game";
+import { getAgentAddress } from "./agentSigner.service";
 
 export class GamesService {
   private supabase;
@@ -133,7 +134,7 @@ export class GamesService {
   /**
    * Lista juegos por estado
    */
-  async listGamesByStatus(status: 'ready' | 'active' | 'finished' | 'cancelled'): Promise<Game[]> {
+  async listGamesByStatus(status: 'pending_vrf' | 'ready' | 'active' | 'finished' | 'cancelled'): Promise<Game[]> {
     const { data, error } = await this.supabase
       .from("games")
       .select("*")
@@ -182,5 +183,100 @@ export class GamesService {
       wins: wins || 0,
       winRate
     };
+  }
+
+  /**
+   * Registra el juego como solicitado (VRF) en Supabase
+   */
+  async registerGameRequest(
+    gameId: number,
+    agentIds: string[],
+    bettorAddress?: string,
+    bettorChoice?: number
+  ): Promise<Game> {
+    const agentsConfig = agentIds.map((agentId, index) => ({
+      agentId,
+      name: agentId.charAt(0).toUpperCase() + agentId.slice(1),
+      address: getAgentAddress(agentId),
+      playerIndex: index,
+    }));
+
+    const existing = await this.getGameByGameId(gameId);
+
+    if (existing) {
+      return this.updateGame(gameId, {
+        status: 'pending_vrf',
+        agents: existing.agents || (agentsConfig as any),
+        bettor_address: bettorAddress ?? existing.bettor_address,
+        bettor_choice: bettorChoice ?? existing.bettor_choice,
+        total_moves: existing.total_moves ?? 0,
+        total_turns: existing.total_turns ?? 0,
+      });
+    }
+
+    return this.createGame({
+      game_id: gameId,
+      status: 'pending_vrf',
+      agents: agentsConfig as any,
+      bettor_address: bettorAddress,
+      bettor_choice: bettorChoice,
+      total_moves: 0,
+      total_turns: 0,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Guarda/actualiza el contexto on-chain que llega desde Chainlink CRE
+   */
+  async saveOnchainContext(payload: ChainGamePayload): Promise<Game> {
+    const gameId = parseInt(payload.gameId, 10);
+    if (Number.isNaN(gameId)) {
+      throw new Error(`Invalid gameId in payload: ${payload.gameId}`);
+    }
+
+    const updates: GameUpdate = {
+      bettor_address: payload.bettor,
+      bettor_choice: payload.bettorChoice,
+      chain_status: payload.status,
+      chain_random_ready: payload.randomReady,
+      chain_request_id: payload.requestId,
+      chain_start_time: payload.startTime,
+      chain_end_time: payload.endTime,
+      chain_deposit: payload.deposit,
+      chain_winner: payload.winner,
+      ai_players: payload.aiPlayers as any,
+      board_state: payload.board as any,
+      chain_payload: payload as any,
+    };
+
+    // Si startTime viene en epoch y es válido lo convertimos a ISO
+    if (payload.startTime && payload.startTime !== '0') {
+      const startMillis = parseInt(payload.startTime, 10) * 1000;
+      if (!Number.isNaN(startMillis)) {
+        updates.started_at = new Date(startMillis).toISOString();
+      }
+    }
+
+    const existing = await this.getGameByGameId(gameId);
+
+    if (existing?.status === 'active' || existing?.status === 'finished') {
+      updates.status = existing.status as any;
+    } else {
+      updates.status = 'ready';
+    }
+
+    if (existing) {
+      return this.updateGame(gameId, updates);
+    }
+
+    return this.createGame({
+      ...updates,
+      game_id: gameId,
+      agents: payload.aiPlayers as any,
+      total_moves: 0,
+      total_turns: 0,
+      created_at: new Date().toISOString(),
+    });
   }
 }

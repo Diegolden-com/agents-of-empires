@@ -12,3 +12,31 @@ export interface AgentConfig {
   address: string;
   playerIndex: number; // 0-3
 }
+
+// Payload que envía Chainlink CRE al iniciar el juego
+export interface ChainGamePayload {
+  gameId: string;
+  bettor: string;
+  deposit: string;
+  status: number;
+  randomReady: boolean;
+  bettorChoice: number;
+  requestId: string;
+  startTime: string;
+  endTime: string;
+  winner: number;
+  aiPlayers: Array<{
+    index: number;
+    company: number;
+    companyName: string;
+    modelIndex: number;
+    modelName: string;
+    playOrder: number;
+  }>;
+  board: Array<{
+    index: number;
+    position: string;
+    resource: number;
+    resourceName: string;
+  }>;
+}
