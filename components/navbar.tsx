@@ -15,26 +15,9 @@ export function Navbar() {
     <nav className="border-b bg-white">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="text-xl font-bold text-primary">
-              🎲 Catán LLM
-            </Link>
-            
-            <div className="hidden md:flex items-center gap-6">
-              <Link 
-                href="/" 
-                className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-              >
-                Inicio
-              </Link>
-              <Link 
-                href="/ai-battle" 
-                className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-              >
-                AI Battle
-              </Link>
-            </div>
-          </div>
+          <Link href="/" className="text-xl font-bold text-primary">
+            🎲 Agents of Catan
+          </Link>
 
           <div className="flex items-center gap-4">
             {ready && !authenticated && (
