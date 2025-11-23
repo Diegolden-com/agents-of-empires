@@ -1,4 +1,3 @@
-import { openai, createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import { z } from 'zod';
 import { AgentConfig, LLMConfig } from './agent-configs';
@@ -6,50 +5,21 @@ import { GameState, ResourceType } from './types';
 import { rankVertices, rankEdges, formatVertexOptions, formatEdgeOptions } from './position-ranker';
 import { saveOptionMap } from './option-mapper';
 
-// ✨ Vercel AI SDK Gateway configuration
-const vercelGateway = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // Vercel AI SDK usa OpenAI key como gateway
-  compatibility: 'strict',
-});
+// ✨ Vercel AI SDK con AI Gateway
+// El SDK automáticamente detecta AI_GATEWAY_API_KEY del .env
+// No es necesario crear un cliente custom
 
-// ✨ Map provider/model to Vercel AI SDK format
-function mapToVercelModel(provider: string, model: string): string {
-  // Vercel AI SDK gateway acepta modelos en formato: provider/model
-  const mapping: Record<string, string> = {
-    // OpenAI
-    'openai/gpt-4o': 'gpt-4o',
-    'openai/gpt-4o-mini': 'gpt-4o-mini',
-    'openai/gpt-4-turbo': 'gpt-4-turbo',
-    'openai/gpt-3.5-turbo': 'gpt-3.5-turbo',
-
-    // Anthropic (via gateway)
-    'anthropic/claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-20241022',
-    'anthropic/claude-3-5-haiku-20241022': 'claude-3-5-haiku-20241022',
-
-    // Google (via gateway)
-    'google/gemini-1.5-pro': 'gemini-1.5-pro',
-    'google/gemini-1.5-flash': 'gemini-1.5-flash',
-
-    // Mistral (via gateway)
-    'mistral/mistral-large-latest': 'mistral-large-latest',
-    'mistral/mistral-small-latest': 'mistral-small-latest',
-  };
-
-  const key = `${provider}/${model}`;
-  return mapping[key] || model;
+if (!process.env.AI_GATEWAY_API_KEY && !process.env.OPENAI_API_KEY) {
+  console.error('⚠️ No AI_GATEWAY_API_KEY or OPENAI_API_KEY found in environment');
+  console.error('⚠️ AI models will not work. Please check your .env file');
+} else {
+  console.log(`✅ AI Gateway/SDK configured`);
 }
 
 // ✨ Función para obtener el modelo de IA según la configuración
-function getModelFromConfig(config: LLMConfig) {
-  const modelName = mapToVercelModel(config.provider, config.model);
-
-  // Todos los modelos usan el gateway de OpenAI/Vercel
-  if (config.provider === 'openai') {
-    return openai(modelName);
-  }
-
-  // Para otros providers, usar el gateway que simula OpenAI
-  return vercelGateway(modelName);
+// Retorna el string en formato 'provider/model' que el SDK entiende automáticamente
+function getModelFromConfig(config: LLMConfig): string {
+  return `${config.provider}/${config.model}`;
 }
 
 export const agentDecisionSchema = z.object({

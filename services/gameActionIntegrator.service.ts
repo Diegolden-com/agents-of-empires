@@ -41,7 +41,8 @@ export class GameActionIntegratorService {
   async processAndSaveAction(
     gameId: number,
     agentId: string,
-    action: AgentAction
+    action: AgentAction,
+    playerId?: string
   ): Promise<void> {
     try {
       console.log(`\n🎮 Processing action for ${agentId}:`);
@@ -52,8 +53,10 @@ export class GameActionIntegratorService {
       // 1. Obtener la dirección del agente
       const agentAddress = getAgentAddress(agentId);
 
-      // 2. Encodear la acción
-      const { moveType, encodedData } = encodeAgentAction(action);
+      // 2. Encodear la acción (pasamos playerId para resolver opciones a IDs)
+      // Si no tenemos playerId, usamos agentId como fallback
+      const playerIdForMapping = playerId || agentId;
+      const { moveType, encodedData } = encodeAgentAction(action, playerIdForMapping);
 
       console.log(`   Move Type: ${moveType}`);
       console.log(`   Encoded Data: ${encodedData}`);

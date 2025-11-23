@@ -300,7 +300,8 @@ export async function POST(req: NextRequest) {
                 {
                   type: decision.action,
                   data: decision.data
-                }
+                },
+                currentPlayer.id // Pass playerId for option mapping (player_0, player_1, etc.)
               );
               console.log(`✅ Action saved to database for ${agentIds[gameState.currentPlayerIndex]}`);
             } catch (dbError) {

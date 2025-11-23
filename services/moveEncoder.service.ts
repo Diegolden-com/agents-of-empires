@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { AgentAction } from '@/lib/agent-interface';
+import { getVertexIdFromOption, getEdgeIdFromOption } from '@/lib/option-mapper';
 
 /**
  * Servicio para encodear datos de acciones según el formato del smart contract
@@ -137,7 +138,10 @@ export function mapActionTypeToMoveType(actionType: string): MoveType {
 /**
  * Encodea una acción completa del agente
  */
-export function encodeAgentAction(action: AgentAction): {
+export function encodeAgentAction(
+  action: AgentAction,
+  playerId?: string
+): {
   moveType: MoveType;
   encodedData: string;
 } {
@@ -146,26 +150,110 @@ export function encodeAgentAction(action: AgentAction): {
   let encodedData: string;
 
   switch (action.type) {
-    case 'build_road':
-      if (!action.data?.edgeId && action.data?.edgeId !== 0) {
-        throw new Error('edgeId required for build_road');
-      }
-      encodedData = encodeBuildRoad(action.data.edgeId);
-      break;
+    case 'build_road': {
+      let edgeId: number;
 
-    case 'build_settlement':
-      if (!action.data?.vertexId && action.data?.vertexId !== 0) {
-        throw new Error('vertexId required for build_settlement');
+      // Support both option number (1-5) and direct edgeId
+      if (typeof action.data === 'number') {
+        // Option format: just a number
+        if (!playerId) {
+          throw new Error('playerId required when using option format');
+        }
+        const resolvedId = getEdgeIdFromOption(playerId, action.data);
+        if (resolvedId === null) {
+          throw new Error(`Failed to resolve edge option ${action.data} for player ${playerId}`);
+        }
+        edgeId = resolvedId;
+      } else if (action.data?.option !== undefined) {
+        // Option format: { option: number }
+        if (!playerId) {
+          throw new Error('playerId required when using option format');
+        }
+        const resolvedId = getEdgeIdFromOption(playerId, action.data.option);
+        if (resolvedId === null) {
+          throw new Error(`Failed to resolve edge option ${action.data.option} for player ${playerId}`);
+        }
+        edgeId = resolvedId;
+      } else if (action.data?.edgeId !== undefined) {
+        // Direct edgeId format: { edgeId: number }
+        edgeId = action.data.edgeId;
+      } else {
+        throw new Error('edgeId or option required for build_road');
       }
-      encodedData = encodeBuildSettlement(action.data.vertexId);
-      break;
 
-    case 'build_city':
-      if (!action.data?.vertexId && action.data?.vertexId !== 0) {
-        throw new Error('vertexId required for build_city');
-      }
-      encodedData = encodeBuildCity(action.data.vertexId);
+      encodedData = encodeBuildRoad(edgeId);
       break;
+    }
+
+    case 'build_settlement': {
+      let vertexId: number;
+
+      // Support both option number (1-5) and direct vertexId
+      if (typeof action.data === 'number') {
+        // Option format: just a number
+        if (!playerId) {
+          throw new Error('playerId required when using option format');
+        }
+        const resolvedId = getVertexIdFromOption(playerId, action.data);
+        if (resolvedId === null) {
+          throw new Error(`Failed to resolve vertex option ${action.data} for player ${playerId}`);
+        }
+        vertexId = resolvedId;
+      } else if (action.data?.option !== undefined) {
+        // Option format: { option: number }
+        if (!playerId) {
+          throw new Error('playerId required when using option format');
+        }
+        const resolvedId = getVertexIdFromOption(playerId, action.data.option);
+        if (resolvedId === null) {
+          throw new Error(`Failed to resolve vertex option ${action.data.option} for player ${playerId}`);
+        }
+        vertexId = resolvedId;
+      } else if (action.data?.vertexId !== undefined) {
+        // Direct vertexId format: { vertexId: number }
+        vertexId = action.data.vertexId;
+      } else {
+        throw new Error('vertexId or option required for build_settlement');
+      }
+
+      encodedData = encodeBuildSettlement(vertexId);
+      break;
+    }
+
+    case 'build_city': {
+      let vertexId: number;
+
+      // Support both option number (1-5) and direct vertexId
+      if (typeof action.data === 'number') {
+        // Option format: just a number
+        if (!playerId) {
+          throw new Error('playerId required when using option format');
+        }
+        const resolvedId = getVertexIdFromOption(playerId, action.data);
+        if (resolvedId === null) {
+          throw new Error(`Failed to resolve vertex option ${action.data} for player ${playerId}`);
+        }
+        vertexId = resolvedId;
+      } else if (action.data?.option !== undefined) {
+        // Option format: { option: number }
+        if (!playerId) {
+          throw new Error('playerId required when using option format');
+        }
+        const resolvedId = getVertexIdFromOption(playerId, action.data.option);
+        if (resolvedId === null) {
+          throw new Error(`Failed to resolve vertex option ${action.data.option} for player ${playerId}`);
+        }
+        vertexId = resolvedId;
+      } else if (action.data?.vertexId !== undefined) {
+        // Direct vertexId format: { vertexId: number }
+        vertexId = action.data.vertexId;
+      } else {
+        throw new Error('vertexId or option required for build_city');
+      }
+
+      encodedData = encodeBuildCity(vertexId);
+      break;
+    }
 
     case 'trade_bank':
       // Convertir el formato de trade_bank a resourceDeltas
