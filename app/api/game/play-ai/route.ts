@@ -56,7 +56,7 @@ function serializeGameState(state: GameState) {
 
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
-  
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: any) => {
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         const agentConfigs = agentIds.map(id => {
           const agent = getAgentById(id);
           if (!agent) return null;
-          
+
           // ✨ Override LLM config if provided
           if (llmConfigs && llmConfigs[id]) {
             return {
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
           }
           return agent;
         }).filter(Boolean);
-        
+
         if (agentConfigs.length !== agentIds.length) {
           send({ type: 'error', message: 'Invalid agent IDs' });
           controller.close();
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
         }
 
         console.log('🎲 Catan AI Game starting:', agentConfigs.map(a => a!.name).join(' vs '));
-        
+
         // ✨ Log LLM configurations
         agentConfigs.forEach(agent => {
           console.log(`  - ${agent!.name}: ${agent!.llmConfig.provider}/${agent!.llmConfig.model} (temp: ${agent!.llmConfig.temperature})`);
@@ -106,11 +106,11 @@ export async function POST(req: NextRequest) {
         const playerNames = agentConfigs.map(a => a!.name);
         const gameState = createGame(playerNames);
         const gameId = createGameSession(gameState);
-        
+
         console.log(`🎮 Game created with ID: ${gameId}`);
 
-        send({ 
-          type: 'game_start', 
+        send({
+          type: 'game_start',
           gameId,
           players: gameState.players.map((p, i) => ({
             ...p,
@@ -125,9 +125,9 @@ export async function POST(req: NextRequest) {
         gameState.players.forEach((player, i) => {
           const agent = agentConfigs[i]!;
           const greeting = getGreeting(agent);
-          send({ 
-            type: 'greeting', 
-            playerId: player.id, 
+          send({
+            type: 'greeting',
+            playerId: player.id,
             playerName: player.name,
             message: greeting,
           });
@@ -153,9 +153,9 @@ export async function POST(req: NextRequest) {
           if (!currentAgentConfig) break;
 
           console.log(`\n🎯 Turn ${gameState.turn} | Phase: ${gameState.phase} | Player: ${currentPlayer.name}`);
-          
-          send({ 
-            type: 'turn_start', 
+
+          send({
+            type: 'turn_start',
             turn: gameState.turn,
             phase: gameState.phase,
             currentPlayer: {
@@ -183,12 +183,12 @@ export async function POST(req: NextRequest) {
           } catch (error) {
             console.error(`❌ Decision error for ${currentPlayer.name}:`, error);
             consecutiveFailures++;
-            send({ 
-              type: 'error', 
+            send({
+              type: 'error',
               message: `Error getting decision from ${currentPlayer.name}: ${error}`,
               playerId: currentPlayer.id,
             });
-            
+
             // If too many decision errors, skip to next player instead of breaking
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
               console.error(`❌ Too many decision errors, skipping player ${currentPlayer.name}`);
@@ -211,8 +211,8 @@ export async function POST(req: NextRequest) {
             data: decision.data,
           });
 
-          conversationHistory.push({ 
-            from: currentPlayer.name, 
+          conversationHistory.push({
+            from: currentPlayer.name,
             text: decision.message,
           });
 
@@ -228,11 +228,11 @@ export async function POST(req: NextRequest) {
           if (!result.success) {
             consecutiveFailures++;
             console.warn(`⚠️ Action failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}): ${result.message}`);
-            
+
             // After max failures, force end turn or skip to next phase
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
               console.error(`❌ Max failures reached, forcing phase progression`);
-              
+
               // Force phase progression or end turn
               if (gameState.phase === 'setup_settlement_1') {
                 gameState.phase = 'setup_road_1';
@@ -250,9 +250,9 @@ export async function POST(req: NextRequest) {
                 gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
                 gameState.turn++;
               }
-              
+
               consecutiveFailures = 0;
-              
+
               send({
                 type: 'action_result',
                 playerId: currentPlayer.id,
@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
                 message: '⏭️ Too many failures, skipping to next phase/player',
                 gameState: serializeGameState(gameState),
               });
-              
+
               continue; // Skip to next iteration
             }
           } else {
@@ -284,8 +284,8 @@ export async function POST(req: NextRequest) {
           const winner = gameState.players.find(p => p.victoryPoints >= 10);
           if (winner) {
             const winnerAgent = agentConfigs[gameState.players.indexOf(winner)];
-            send({ 
-              type: 'victory', 
+            send({
+              type: 'victory',
               winner: {
                 id: winner.id,
                 name: winner.name,
@@ -303,12 +303,12 @@ export async function POST(req: NextRequest) {
 
         // Game ended without a winner reaching 10 VP
         const realWinner = gameState.players.find(p => p.victoryPoints >= 10);
-        
+
         if (realWinner) {
           // Someone actually won with 10 VP
           const winnerAgent = agentConfigs[gameState.players.indexOf(realWinner)];
-          send({ 
-            type: 'victory', 
+          send({
+            type: 'victory',
             winner: {
               id: realWinner.id,
               name: realWinner.name,
@@ -320,15 +320,15 @@ export async function POST(req: NextRequest) {
           });
         } else if (turnCount >= maxTurns) {
           // Max turns reached without winner - declare winner by VP only if they have reasonable points
-          const leader = gameState.players.reduce((prev, current) => 
+          const leader = gameState.players.reduce((prev, current) =>
             current.victoryPoints > prev.victoryPoints ? current : prev
           );
-          
+
           if (leader.victoryPoints >= 5) {
             // Only declare winner if they have at least 5 VP (reasonable progress)
             const winnerAgent = agentConfigs[gameState.players.indexOf(leader)];
-            send({ 
-              type: 'victory', 
+            send({
+              type: 'victory',
               winner: {
                 id: leader.id,
                 name: leader.name,
@@ -356,8 +356,8 @@ export async function POST(req: NextRequest) {
         controller.close();
       } catch (error) {
         console.error('Game error:', error);
-        send({ 
-          type: 'error', 
+        send({
+          type: 'error',
           message: error instanceof Error ? error.message : 'Unknown error',
         });
         controller.close();
@@ -376,23 +376,23 @@ export async function POST(req: NextRequest) {
 
 function getGreeting(agent: any): string {
   const greetings: Record<string, string> = {
-    conquistador: '¡Conquistaré esta isla! Ningún territorio estará fuera de mi alcance.',
-    merchant: 'Que los mejores tratos nos traigan la victoria. Prosperidad para todos.',
-    architect: 'Construiré un imperio que perdurará. La paciencia es clave.',
-    gambler: '¡Que rueden los dados! La fortuna favorece a los audaces.',
+    conquistador: 'I will conquer this island! No territory will be out of my reach.',
+    merchant: 'May the best deals bring us victory. Prosperity for all.',
+    architect: 'I will build an empire that will endure. Patience is key.',
+    gambler: 'Let the dice roll! Fortune favors the bold.',
   };
-  
-  return greetings[agent.id] || '¡Que comience el juego!';
+
+  return greetings[agent.id] || 'Let the game begin!';
 }
 
 function getVictoryMessage(agent: any): string {
   const victories: Record<string, string> = {
-    conquistador: '¡VICTORIA! Mi imperio se extiende por toda la isla. ¡Nadie pudo detener mi expansión!',
-    merchant: 'La estrategia y el comercio inteligente prevalecen. Una victoria bien merecida.',
-    architect: 'Mi imperio construido con paciencia y visión ha triunfado. La planificación siempre gana.',
-    gambler: '¡JA! ¿Vieron eso? ¡Los riesgos calculados dan sus frutos! ¡Victoria épica!',
+    conquistador: 'VICTORY! My empire extends across the entire island. No one could stop my expansion!',
+    merchant: 'Strategy and smart trading prevail. A well-deserved victory.',
+    architect: 'My empire built with patience and vision has triumphed. Planning always wins.',
+    gambler: 'HA! Did you see that? Calculated risks pay off! Epic victory!',
   };
-  
-  return victories[agent.id] || '¡Victoria!';
+
+  return victories[agent.id] || 'Victory!';
 }
 
