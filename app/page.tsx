@@ -189,16 +189,6 @@ export default function AIBattlePage() {
       <Navbar />
       <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-green-50 p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-            🤖 AI Agent Battle Arena
-          </h1>
-          <p className="text-xl text-gray-600">
-            Watch AI agents compete in Settlers of Catan
-          </p>
-        </div>
-
         {!gameStarted ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Agent Selection */}
