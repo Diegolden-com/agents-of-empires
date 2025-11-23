@@ -6,6 +6,7 @@ import { CatanBoardWithBuildings } from '@/components/catan-board-with-buildings
 import { PlayerPanel } from '@/components/player-panel';
 import { GameControls } from '@/components/game-controls';
 import { ResourceLog } from '@/components/resource-log';
+import { BlockchainInfo } from '@/components/blockchain-info';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -38,12 +39,34 @@ export default function GamePage({ params }: PageProps) {
 
   async function loadGameState() {
     try {
+      console.log('🔍 Loading game state for:', gameId);
       const response = await fetch(`/api/game/${gameId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Error response:', response.status, errorData);
+        setGameState(null);
+        setLoading(false);
+        return;
+      }
+      
       const data = await response.json();
-      setGameState(data.state);
+      console.log('✅ Game state loaded:', {
+        gameId: data.id,
+        phase: data.state?.phase,
+        players: data.state?.players?.length,
+      });
+      
+      if (data.state) {
+        setGameState(data.state);
+      } else {
+        console.error('❌ No state in response:', data);
+        setGameState(null);
+      }
       setLoading(false);
     } catch (error) {
-      console.error('Error loading game:', error);
+      console.error('❌ Error loading game:', error);
+      setGameState(null);
       setLoading(false);
     }
   }
@@ -88,10 +111,19 @@ export default function GamePage({ params }: PageProps) {
           <CardHeader>
             <CardTitle>Juego no encontrado</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Button onClick={() => window.location.href = '/'}>
-              Volver al inicio
-            </Button>
+          <CardContent className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <p>Game ID buscado: <code className="font-mono bg-gray-100 px-2 py-1 rounded">{gameId}</code></p>
+              <p className="mt-2">Verifica en la consola del navegador para más detalles.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => window.location.href = '/'}>
+                Volver al inicio
+              </Button>
+              <Button variant="outline" onClick={() => loadGameState()}>
+                Reintentar
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </main>
@@ -105,7 +137,14 @@ export default function GamePage({ params }: PageProps) {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">🎲 Catán - Turno {gameState.turn}</h1>
-            <p className="text-sm text-muted-foreground">Game ID: {gameId}</p>
+            <p className="text-sm text-muted-foreground">
+              Game ID: {gameId}
+              {gameState.blockchainMetadata && (
+                <span className="ml-2 text-purple-600">
+                  (Blockchain: {gameState.blockchainMetadata.gameId})
+                </span>
+              )}
+            </p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -140,6 +179,11 @@ export default function GamePage({ params }: PageProps) {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Mostrar información del blockchain si el juego viene del smart contract */}
+        {gameState.blockchainMetadata && (
+          <BlockchainInfo metadata={gameState.blockchainMetadata} />
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

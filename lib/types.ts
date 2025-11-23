@@ -16,6 +16,7 @@ export interface HexTile {
   terrain: TerrainType;
   number: number | null; // null for desert
   position: { q: number; r: number; s: number }; // Cubic coordinates
+  blockchainIndex?: number; // Índice del hexágono en el smart contract (0-18)
 }
 
 export interface Vertex {
@@ -54,6 +55,8 @@ export interface Player {
   longestRoad: boolean;
   largestArmy: boolean;
   knightsPlayed: number;
+  aiModel?: string; // Modelo de IA usado (ej: "anthropic/claude-sonnet-4.5")
+  playOrder?: number; // Orden de juego asignado por el smart contract (1-4)
 }
 
 export type DevelopmentCard = 'knight' | 'victory_point' | 'road_building' | 'year_of_plenty' | 'monopoly';
@@ -68,6 +71,17 @@ export interface GameState {
   longestRoadPlayerId: string | null;
   largestArmyPlayerId: string | null;
   lastSettlementId?: number; // Track the last settlement built for setup phase validation
+  blockchainMetadata?: BlockchainMetadata; // Metadatos del smart contract
+}
+
+export interface BlockchainMetadata {
+  gameId: string; // ID del juego en el smart contract
+  bettor: string; // Dirección del apostador
+  deposit: string; // Cantidad apostada en wei
+  bettorChoice: number; // Jugador elegido por el apostador (0-3)
+  requestId: string; // ID de la petición VRF
+  startTime: string; // Timestamp de inicio
+  status: number; // Estado del juego en el smart contract
 }
 
 export type GamePhase = 

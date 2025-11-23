@@ -9,11 +9,35 @@ import {
   BuildSettlementAction,
   BuildCityAction,
   TradeWithBankAction,
-  ResourceType
+  ResourceType,
+  BlockchainMetadata
 } from './types';
-import { generateBoard } from './board-generator';
+import { generateBoard, BlockchainBoardConfig } from './board-generator';
 
 const COLORS = ['red', 'blue', 'white', 'orange'];
+
+// Mapeo de compañías del blockchain a nombres locales
+const COMPANY_NAMES: Record<number, string> = {
+  0: 'Anthropic',
+  1: 'Google',
+  2: 'OpenAI',
+  3: 'xAI',
+  4: 'DeepSeek',
+};
+
+// Mapeo de modelos del blockchain a identificadores
+const MODEL_MAPPING: Record<string, string> = {
+  'anthropic/claude-haiku-4.5': 'Claude Haiku 4.5',
+  'anthropic/claude-sonnet-4.5': 'Claude Sonnet 4.5',
+  'google/gemini-2.5-flash-lite': 'Gemini Flash Lite',
+  'google/gemini-2.5-flash': 'Gemini Flash',
+  'openai/gpt-5': 'GPT-5',
+  'openai/gpt-5-codex': 'GPT-5 Codex',
+  'xai/grok-4': 'Grok 4',
+  'xai/grok-4-fast-reasoning': 'Grok 4 Fast',
+  'deepseek/deepseek-v3.2-exp-thinking': 'DeepSeek Thinking',
+  'deepseek/deepseek-v3.2-exp': 'DeepSeek V3.2',
+};
 
 export function createGame(playerNames: string[]): GameState {
   if (playerNames.length < 2 || playerNames.length > 4) {
@@ -45,6 +69,85 @@ export function createGame(playerNames: string[]): GameState {
     longestRoadPlayerId: null,
     largestArmyPlayerId: null,
     lastSettlementId: undefined,
+  };
+}
+
+/**
+ * Crea un juego desde el payload del blockchain
+ */
+export function createGameFromBlockchain(payload: any): GameState {
+  if (!payload.aiPlayers || payload.aiPlayers.length !== 4) {
+    throw new Error('Blockchain game requires exactly 4 AI players');
+  }
+
+  if (!payload.board || payload.board.length !== 19) {
+    throw new Error('Blockchain game requires exactly 19 hexes');
+  }
+
+  // Ordenar jugadores por playOrder (1-4)
+  const sortedPlayers = [...payload.aiPlayers].sort((a, b) => a.playOrder - b.playOrder);
+
+  // Crear jugadores basados en la configuración del blockchain
+  const players: Player[] = sortedPlayers.map((aiPlayer: any, index: number) => {
+    const companyName = COMPANY_NAMES[aiPlayer.company] || 'Unknown';
+    const modelDisplay = MODEL_MAPPING[aiPlayer.modelName] || aiPlayer.modelName;
+    const playerName = `${companyName} ${modelDisplay}`;
+
+    return {
+      id: `player_${aiPlayer.index}`,
+      name: playerName,
+      color: COLORS[index],
+      resources: { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 },
+      developmentCards: [],
+      roads: 15,
+      settlements: 5,
+      cities: 4,
+      victoryPoints: 0,
+      longestRoad: false,
+      largestArmy: false,
+      knightsPlayed: 0,
+      aiModel: aiPlayer.modelName,
+      playOrder: aiPlayer.playOrder,
+    };
+  });
+
+  // Configurar tablero desde el blockchain
+  const boardConfig: BlockchainBoardConfig = {
+    hexes: payload.board.map((hex: any) => ({
+      index: hex.index,
+      resource: hex.resource,
+    })),
+  };
+
+  const board = generateBoard(boardConfig);
+
+  // Crear metadatos del blockchain
+  const blockchainMetadata: BlockchainMetadata = {
+    gameId: payload.gameId,
+    bettor: payload.bettor,
+    deposit: payload.deposit,
+    bettorChoice: payload.bettorChoice,
+    requestId: payload.requestId,
+    startTime: payload.startTime,
+    status: payload.status,
+  };
+
+  console.log('✅ Game created from blockchain:');
+  console.log('   Players:', players.map(p => p.name));
+  console.log('   Board hexes:', board.hexes.length);
+  console.log('   Blockchain Game ID:', blockchainMetadata.gameId);
+
+  return {
+    board,
+    players,
+    currentPlayerIndex: 0,
+    phase: 'setup_settlement_1',
+    diceRoll: null,
+    turn: 1,
+    longestRoadPlayerId: null,
+    largestArmyPlayerId: null,
+    lastSettlementId: undefined,
+    blockchainMetadata,
   };
 }
 

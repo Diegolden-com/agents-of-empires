@@ -59,17 +59,64 @@ const HEX_POSITIONS = [
   { q: 1, r: -2, s: 1 },
 ];
 
-export function generateBoard(): Board {
-  // Shuffle terrain and numbers for randomization
-  const shuffledLayout = [...CLASSIC_LAYOUT].sort(() => Math.random() - 0.5);
+export interface BlockchainBoardConfig {
+  hexes: Array<{
+    index: number;
+    resource: number; // 0: WOOD, 1: SHEEP, 2: WHEAT, 3: BRICK, 4: ORE, 5: DESERT
+  }>;
+}
+
+// Mapeo de recursos del blockchain a terrenos del juego
+const RESOURCE_TO_TERRAIN: Record<number, TerrainType> = {
+  0: 'wood',
+  1: 'sheep',
+  2: 'wheat',
+  3: 'brick',
+  4: 'ore',
+  5: 'desert',
+};
+
+export function generateBoard(blockchainConfig?: BlockchainBoardConfig): Board {
+  let hexes: HexTile[];
   
-  // Create hex tiles
-  const hexes: HexTile[] = HEX_POSITIONS.map((pos, index) => ({
-    id: `hex_${pos.q}_${pos.r}_${pos.s}`,
-    terrain: shuffledLayout[index].terrain,
-    number: shuffledLayout[index].number,
-    position: pos,
-  }));
+  if (blockchainConfig) {
+    // Usar configuración del blockchain
+    console.log('🔗 Generando tablero desde configuración del blockchain');
+    
+    hexes = HEX_POSITIONS.map((pos, index) => {
+      const blockchainHex = blockchainConfig.hexes.find(h => h.index === index);
+      if (!blockchainHex) {
+        throw new Error(`Missing blockchain hex at index ${index}`);
+      }
+      
+      const terrain = RESOURCE_TO_TERRAIN[blockchainHex.resource];
+      if (!terrain) {
+        throw new Error(`Invalid resource type: ${blockchainHex.resource}`);
+      }
+      
+      // Asignar números según las reglas de Catan
+      // Para simplificar, usamos el layout clásico pero con los terrenos del blockchain
+      const number = terrain === 'desert' ? null : CLASSIC_LAYOUT[index].number;
+      
+      return {
+        id: `hex_${pos.q}_${pos.r}_${pos.s}`,
+        terrain,
+        number,
+        position: pos,
+        blockchainIndex: blockchainHex.index,
+      };
+    });
+  } else {
+    // Generación aleatoria tradicional
+    const shuffledLayout = [...CLASSIC_LAYOUT].sort(() => Math.random() - 0.5);
+    
+    hexes = HEX_POSITIONS.map((pos, index) => ({
+      id: `hex_${pos.q}_${pos.r}_${pos.s}`,
+      terrain: shuffledLayout[index].terrain,
+      number: shuffledLayout[index].number,
+      position: pos,
+    }));
+  }
 
   // Generate vertices with SIMPLE NUMERIC IDs
   // Map from coordinate string to vertex data

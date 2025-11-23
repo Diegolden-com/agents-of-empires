@@ -218,6 +218,17 @@ export function executeAgentAction(state: GameState, playerId: string, action: A
   message: string;
   newState?: GameState;
 } {
+  // Preservar metadatos del blockchain antes de cualquier modificación
+  const blockchainMetadata = state.blockchainMetadata;
+  
+  // Helper para asegurar que los metadatos se preserven antes de retornar
+  const preserveMetadata = (gameState: GameState): GameState => {
+    if (blockchainMetadata && !gameState.blockchainMetadata) {
+      gameState.blockchainMetadata = blockchainMetadata;
+    }
+    return gameState;
+  };
+  
   const player = state.players.find(p => p.id === playerId);
   if (!player) {
     return { success: false, message: 'Player not found' };
@@ -243,7 +254,7 @@ export function executeAgentAction(state: GameState, playerId: string, action: A
         const total = dice[0] + dice[1];
         distributeResources(state, total);
         state.phase = 'main';
-        return { success: true, message: `Rolled ${dice[0]} + ${dice[1]} = ${total}`, newState: state };
+        return { success: true, message: `Rolled ${dice[0]} + ${dice[1]} = ${total}`, newState: preserveMetadata(state) };
 
       case 'build_road':
         // NEW: Support numeric option (1-5) or edgeId (number)
@@ -327,7 +338,7 @@ export function executeAgentAction(state: GameState, playerId: string, action: A
             state.phase = 'setup_settlement_2';
           }
         }
-        return { success: true, message: 'Road built successfully', newState: state };
+        return { success: true, message: 'Road built successfully', newState: preserveMetadata(state) };
 
       case 'build_settlement':
         // NEW: Support numeric option (1-5) or vertexId (number)
@@ -396,7 +407,7 @@ export function executeAgentAction(state: GameState, playerId: string, action: A
         } else if (state.phase === 'setup_settlement_2') {
           state.phase = 'setup_road_2';
         }
-        return { success: true, message: 'Settlement built successfully', newState: state };
+        return { success: true, message: 'Settlement built successfully', newState: preserveMetadata(state) };
 
       case 'build_city':
         if (!action.data?.vertexId) {
@@ -406,7 +417,7 @@ export function executeAgentAction(state: GameState, playerId: string, action: A
         if (!citySuccess) {
           return { success: false, message: 'Cannot build city at this location' };
         }
-        return { success: true, message: 'City built successfully', newState: state };
+        return { success: true, message: 'City built successfully', newState: preserveMetadata(state) };
 
       case 'trade_bank':
         if (!action.data?.give || !action.data?.receive) {
@@ -419,14 +430,14 @@ export function executeAgentAction(state: GameState, playerId: string, action: A
         if (!tradeSuccess) {
           return { success: false, message: 'Cannot complete trade' };
         }
-        return { success: true, message: 'Trade completed', newState: state };
+        return { success: true, message: 'Trade completed', newState: preserveMetadata(state) };
 
       case 'end_turn':
         if (state.phase !== 'main') {
           return { success: false, message: 'Cannot end turn in this phase' };
         }
         endTurn(state);
-        return { success: true, message: 'Turn ended', newState: state };
+        return { success: true, message: 'Turn ended', newState: preserveMetadata(state) };
 
       default:
         return { success: false, message: 'Unknown action type' };

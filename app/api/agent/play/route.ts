@@ -102,14 +102,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log(`🎮 Agent play request: gameId=${gameId}, playerId=${playerId}`);
+    
     const game = getGame(gameId);
     if (!game) {
+      console.error(`❌ Game not found: ${gameId}`);
+      console.error(`   Available games:`, Array.from(require('@/lib/game-store').listGames().map((g: any) => g.id)));
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
     }
+
+    console.log(`✅ Game found: ${game.id}, phase: ${game.state.phase}`);
 
     // Check if it's this player's turn
     const currentPlayer = game.state.players[game.state.currentPlayerIndex];
     if (currentPlayer.id !== playerId) {
+      console.warn(`⚠️ Not player's turn: requested ${playerId}, current ${currentPlayer.id}`);
       return NextResponse.json(
         { error: 'Not your turn', currentPlayer: currentPlayer.name },
         { status: 400 }
@@ -121,12 +128,29 @@ export async function POST(request: NextRequest) {
 
     // Make decision
     const action = makeSimpleDecision(agentState);
+    console.log(`🤖 Agent decision:`, action.type);
 
     // Execute action
     const result = executeAgentAction(game.state, playerId, action);
 
     if (result.success && result.newState) {
+      // Preservar metadatos del blockchain
+      if (game.blockchainMetadata && !result.newState.blockchainMetadata) {
+        result.newState.blockchainMetadata = game.blockchainMetadata;
+      }
+      
       updateGame(gameId, result.newState);
+      console.log(`✅ Action executed, game updated: ${gameId}`);
+      
+      // Verificar que el juego sigue existiendo después de actualizar
+      const verifyGame = getGame(gameId);
+      if (!verifyGame) {
+        console.error(`❌ CRITICAL: Game disappeared after update! gameId=${gameId}`);
+      } else {
+        console.log(`✅ Game verified after update: ${verifyGame.id}`);
+      }
+    } else {
+      console.warn(`⚠️ Action failed:`, result.message);
     }
 
     return NextResponse.json({
