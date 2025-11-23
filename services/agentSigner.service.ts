@@ -49,17 +49,21 @@ export function getAgentWallet(agentId: string): ethers.Wallet {
 }
 
 /**
- * Construye el mensaje a firmar según el formato del smart contract
- * Formato: "gameId,moveType,dataHash,nonce"
+ * Construye el mensaje a firmar según el formato del smart contract con EVVM
+ * Formato: "evvmID,recordMove,gameId,moveType,dataHash,nonce"
  *
- * Ejemplo: "1,BUILD_ROAD,0x1234...,0"
+ * Ejemplo: "1,recordMove,1,BUILD_ROAD,0x1234...,0"
  */
-export function buildMessageToSign(moveData: MoveData): string {
+export function buildMessageToSign(moveData: MoveData, evvmID: string): string {
   // Hash del data (keccak256)
   const dataHash = ethers.keccak256(moveData.data);
 
-  // Construir el mensaje concatenando los campos
+  // Construir el mensaje concatenando los campos según SignatureRecover.sol
+  // Formato: "{evvmID},{functionName},{inputs}"
+  // donde inputs = "{gameId},{moveType},{dataHash},{nonce}"
   const message = [
+    evvmID,
+    'recordMove',
     moveData.gameId.toString(),
     moveData.moveType,
     dataHash,
@@ -110,7 +114,8 @@ export function verifySignatureEIP191(
  */
 export async function signAgentMove(
   agentId: string,
-  moveData: MoveData
+  moveData: MoveData,
+  evvmID: string
 ): Promise<SignedMove> {
   // Obtener la wallet del agente
   const wallet = getAgentWallet(agentId);
@@ -122,8 +127,8 @@ export async function signAgentMove(
     );
   }
 
-  // Construir el mensaje
-  const message = buildMessageToSign(moveData);
+  // Construir el mensaje incluyendo evvmID
+  const message = buildMessageToSign(moveData, evvmID);
 
   // Firmar con EIP-191
   const { signature, messageHash } = await signMessageEIP191(wallet, message);
@@ -136,6 +141,7 @@ export async function signAgentMove(
 
   console.log(`✅ Move signed for agent ${agentId}:`);
   console.log(`   Agent: ${wallet.address}`);
+  console.log(`   evvmID: ${evvmID}`);
   console.log(`   Message: ${message}`);
   console.log(`   Signature: ${signature}`);
   console.log(`   Hash: ${messageHash}`);

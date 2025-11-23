@@ -131,6 +131,12 @@ export async function POST(request: Request) {
                 const priorityFlagEvvm = Boolean(move.priority_flag_evvm);
                 const signatureEvvm = move.signature_evvm || "0x";
 
+                // Calculate the expected message for signature verification
+                const dataHash = ethers.keccak256(data);
+                const expectedMessage = `${move.game_id},${moveType},${dataHash},${move.nonce}`;
+                console.log(`Expected signature message: "${expectedMessage}"`);
+                console.log(`Data hash: ${dataHash}`);
+
                 console.log(`Submitting move with params:`, {
                     gameId: gameId.toString(),
                     agent,

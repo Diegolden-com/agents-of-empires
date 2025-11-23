@@ -521,76 +521,6 @@ export default function AIBattlePage() {
                 </CardContent>
               </Card>
 
-              {/* Quick Presets */}
-              {selectedAgents.length >= 2 && (
-                <Card className="bg-gradient-to-r from-purple-50 to-blue-50">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">⚡ Quick Presets</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start"
-                      onClick={() => {
-                        const configs: Record<string, any> = {};
-                        selectedAgents.forEach(id => {
-                          configs[id] = {
-                            provider: 'openai',
-                            model: 'gpt-4o-mini',
-                            temperature: 0.7,
-                            maxTokens: 300,
-                          };
-                        });
-                        setAgentLLMConfigs(configs);
-                      }}
-                    >
-                      💰 All GPT-4o-mini (Económico)
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start"
-                      onClick={() => {
-                        const configs: Record<string, any> = {};
-                        selectedAgents.forEach(id => {
-                          configs[id] = {
-                            provider: 'openai',
-                            model: 'gpt-4o',
-                            temperature: 0.7,
-                            maxTokens: 300,
-                          };
-                        });
-                        setAgentLLMConfigs(configs);
-                      }}
-                    >
-                      🔥 All GPT-4o (Premium)
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start"
-                      onClick={() => {
-                        const configs: Record<string, any> = {};
-                        const providers = ['openai', 'anthropic', 'google', 'openai'];
-                        const models = ['gpt-4o', 'claude-3-5-sonnet-20241022', 'gemini-1.5-flash', 'gpt-4o-mini'];
-                        selectedAgents.forEach((id, i) => {
-                          configs[id] = {
-                            provider: providers[i % providers.length],
-                            model: models[i % models.length],
-                            temperature: 0.7,
-                            maxTokens: 300,
-                          };
-                        });
-                        setAgentLLMConfigs(configs);
-                      }}
-                    >
-                      🌈 Mix de Proveedores
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-
               <div className="space-y-2">
                 {!authenticated && (
                   <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-2">
@@ -981,15 +911,18 @@ function CompactEventCard({ event, showDetails }: { event: any; showDetails: boo
   }
 
   if (event.type === 'victory') {
+    const winnerName = event.winner?.name || event.winner?.agentName || 'Ganador';
+    const victoryPoints = event.winner?.victoryPoints || 0;
+
     return (
       <div className="p-4 bg-yellow-50 border-2 border-yellow-400 rounded">
         <div className="text-center space-y-2">
           <div className="text-2xl">🏆</div>
           <div className="font-bold text-lg text-yellow-900">
-            {event.winner.name} GANA!
+            {winnerName} GANA!
           </div>
           <div className="text-yellow-700 text-sm">
-            {event.winner.victoryPoints} Puntos de Victoria
+            {victoryPoints} Puntos de Victoria
           </div>
         </div>
       </div>
@@ -1073,16 +1006,19 @@ function EventCard({ event }: { event: any }) {
   }
 
   if (event.type === 'victory') {
+    const winnerName = event.winner?.name || event.winner?.agentName || 'Winner';
+    const victoryPoints = event.winner?.victoryPoints || 0;
+
     return (
       <Card className="bg-yellow-50 border-yellow-400 border-2">
         <CardContent className="p-6">
           <div className="text-center space-y-2">
             <div className="text-3xl">🏆</div>
             <div className="font-bold text-xl text-yellow-900">
-              {event.winner.name} WINS!
+              {winnerName} WINS!
             </div>
             <div className="text-yellow-700">
-              {event.winner.victoryPoints} Victory Points
+              {victoryPoints} Victory Points
             </div>
             <div className="text-sm text-yellow-600 italic mt-2">
               &quot;{event.message}&quot;

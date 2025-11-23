@@ -73,10 +73,16 @@ export class GameActionIntegratorService {
         nonce
       };
 
-      // 5. Firmar el movimiento
-      const signedMove = await signAgentMove(agentId, moveData);
+      // 5. Obtener evvmID desde las variables de entorno
+      const evvmID = process.env.EVVM_ID;
+      if (!evvmID) {
+        throw new Error('EVVM_ID not found in environment variables');
+      }
 
-      // 6. Crear el payload para Supabase
+      // 6. Firmar el movimiento con evvmID
+      const signedMove = await signAgentMove(agentId, moveData, evvmID);
+
+      // 7. Crear el payload para Supabase
       const gameMove: GameMoveInsert = createGameMoveInsert(signedMove, {
         priorityFee: 0,
         nonce: 0,
@@ -84,12 +90,12 @@ export class GameActionIntegratorService {
         signature: '0x'
       });
 
-      // 7. Guardar en Supabase
+      // 8. Guardar en Supabase
       const savedMove = await this.gameMovesService.insertGameMove(gameMove);
 
       console.log(`   ✅ Move saved to database with ID: ${savedMove.id}`);
 
-      // 8. Incrementar contador de movimientos
+      // 9. Incrementar contador de movimientos
       await this.gamesService.incrementMoveCount(gameId);
 
     } catch (error) {
