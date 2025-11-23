@@ -1,4 +1,4 @@
-// Core game engine for Catan
+// Core game engine for Catan with SIMPLE NUMERIC IDs
 
 import { 
   GameState, 
@@ -44,6 +44,7 @@ export function createGame(playerNames: string[]): GameState {
     turn: 1,
     longestRoadPlayerId: null,
     largestArmyPlayerId: null,
+    lastSettlementId: undefined,
   };
 }
 
@@ -122,13 +123,13 @@ export function buildRoad(state: GameState, playerId: string, action: BuildRoadA
     return false;
   }
 
-  // CRITICAL: Cannot build on edge that already has a road
+  // Cannot build on edge that already has a road
   if (edge.road) {
     console.error(`❌ Road build failed: Edge ${edge.id} already has a road owned by ${edge.road.playerId}`);
     return false;
   }
 
-  // CRITICAL: Validate that the two vertices are actually adjacent
+  // Validate that edge connects valid vertices
   const [v1Id, v2Id] = edge.vertexIds;
   const v1 = state.board.vertices.find(v => v.id === v1Id);
   const v2 = state.board.vertices.find(v => v.id === v2Id);
@@ -138,46 +139,42 @@ export function buildRoad(state: GameState, playerId: string, action: BuildRoadA
     return false;
   }
 
-  // Parse cubic coordinates from vertex IDs
-  const v1Parts = v1Id.split('_');
-  const v2Parts = v2Id.split('_');
-  const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
-  const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
-
-  // Calculate cubic distance - adjacent vertices should have Chebyshev distance = 1
-  const dq = Math.abs(v1Coords.q - v2Coords.q);
-  const dr = Math.abs(v1Coords.r - v2Coords.r);
-  const ds = Math.abs(v1Coords.s - v2Coords.s);
-  const chebyshevDistance = Math.max(dq, dr, ds);
-
-  if (chebyshevDistance !== 1) {
-    console.error(`❌ Road build failed: Vertices are NOT adjacent! Chebyshev distance=${chebyshevDistance} (must be exactly 1)`);
-    console.error(`   ${v1Id} coords: (${v1Coords.q}, ${v1Coords.r}, ${v1Coords.s})`);
-    console.error(`   ${v2Id} coords: (${v2Coords.q}, ${v2Coords.r}, ${v2Coords.s})`);
-    console.error(`   Delta: (${dq}, ${dr}, ${ds})`);
+  // Verify vertices are actually adjacent (should always be true if edge is valid)
+  if (!v1.adjacentVertexIds.includes(v2Id) || !v2.adjacentVertexIds.includes(v1Id)) {
+    console.error(`❌ Road build failed: Vertices ${v1Id} and ${v2Id} are NOT adjacent!`);
     return false;
   }
 
   // In setup phases, road MUST connect to player's LAST settlement
   if (state.phase === 'setup_road_1' || state.phase === 'setup_road_2') {
-    const playerSettlements = state.board.vertices.filter(v => 
-      v.building && v.building.playerId === playerId
-    );
-    
-    if (playerSettlements.length === 0) {
-      console.error('❌ Road build failed: No settlements to connect to in setup');
-      return false;
+    // Use lastSettlementId if available (most reliable), otherwise fallback to finding settlements
+    let validSettlementId: number | undefined = state.lastSettlementId;
+
+    if (validSettlementId === undefined) {
+      console.warn('⚠️ lastSettlementId not set in setup phase, falling back to settlement list');
+      const playerSettlements = state.board.vertices.filter(v => 
+        v.building && v.building.playerId === playerId
+      );
+      
+      if (playerSettlements.length === 0) {
+        console.error('❌ Road build failed: No settlements to connect to in setup');
+        return false;
+      }
+      
+      // Get the last settlement built (risk of order issue if rely on array order)
+      validSettlementId = playerSettlements[playerSettlements.length - 1].id;
     }
     
-    // Get the last settlement built (most recent)
-    const lastSettlement = playerSettlements[playerSettlements.length - 1];
-    
     // Check if this edge connects to the last settlement
-    const connectsToLastSettlement = edge.vertexIds.includes(lastSettlement.id);
+    const connectsToLastSettlement = edge.vertexIds.includes(validSettlementId!);
     
     if (!connectsToLastSettlement) {
-      console.error(`❌ Road build failed: In setup, road must connect to your last settlement (${lastSettlement.id})`);
+      console.error(`❌ Road build failed: In setup, road must connect to your last settlement (vertex ${validSettlementId})`);
+      console.error(`   Attempted edge ${edge.id} connects vertices: ${edge.vertexIds.join(', ')}`);
+      console.error(`   Last settlement ID in state: ${state.lastSettlementId}`);
       return false;
+    } else {
+      console.log(`✅ Setup Road check passed: Edge ${edge.id} connects to settlement ${validSettlementId}`);
     }
   } else if (!state.phase.startsWith('setup')) {
     // In main game, road must connect to player's existing roads or settlements
@@ -199,7 +196,7 @@ export function buildRoad(state: GameState, playerId: string, action: BuildRoadA
   edge.road = { playerId };
   player.roads -= 1;
   
-  console.log(`✅ Road built by ${player.name} on edge ${edge.id}`);
+  console.log(`✅ Road built by ${player.name} on edge ${edge.id} (vertices ${v1Id} ↔ ${v2Id})`);
   return true;
 }
 
@@ -226,22 +223,18 @@ export function buildSettlement(state: GameState, playerId: string, action: Buil
   }
 
   // CRITICAL: Check distance rule - no settlements within 1 edge distance
+  // This is now SUPER SIMPLE with adjacentVertexIds!
   if (!isVertexDistanceValid(state, vertex.id)) {
     console.error('❌ Settlement build failed: TOO CLOSE to another settlement (distance rule violated)');
     console.error(`   Attempted vertex: ${vertex.id}`);
     
     // Show which settlements are too close
-    const adjacentVertexIds = state.board.edges
-      .filter(e => e.vertexIds.includes(vertex.id))
-      .flatMap(e => e.vertexIds)
-      .filter(id => id !== vertex.id);
-    
-    const tooCloseBuildings = adjacentVertexIds
+    const tooCloseBuildings = vertex.adjacentVertexIds
       .map(id => state.board.vertices.find(v => v.id === id))
       .filter(v => v?.building);
     
     tooCloseBuildings.forEach(v => {
-      console.error(`   ⚠️ Adjacent building found at ${v!.id} owned by ${v!.building!.playerId}`);
+      console.error(`   ⚠️ Adjacent building found at vertex ${v!.id} owned by ${v!.building!.playerId}`);
     });
     
     return false;
@@ -269,6 +262,11 @@ export function buildSettlement(state: GameState, playerId: string, action: Buil
   vertex.building = { playerId, type: 'settlement' };
   player.settlements -= 1;
   player.victoryPoints += 1;
+  
+  // Track last settlement for setup phase road connection rules
+  if (state.phase.startsWith('setup')) {
+    state.lastSettlementId = vertex.id;
+  }
   
   console.log(`✅ Settlement built by ${player.name} on vertex ${vertex.id}`);
   return true;
@@ -359,8 +357,9 @@ export function endTurn(state: GameState): void {
   }
 }
 
-// Helper functions
-function isEdgeConnectedToPlayer(state: GameState, edgeId: string, playerId: string): boolean {
+// Helper functions - NOW MUCH SIMPLER with numeric IDs!
+
+function isEdgeConnectedToPlayer(state: GameState, edgeId: number, playerId: string): boolean {
   const edge = state.board.edges.find(e => e.id === edgeId);
   if (!edge) return false;
 
@@ -382,7 +381,7 @@ function isEdgeConnectedToPlayer(state: GameState, edgeId: string, playerId: str
   return adjacentEdges.some(e => e.road?.playerId === playerId);
 }
 
-function isVertexConnectedToPlayerRoad(state: GameState, vertexId: string, playerId: string): boolean {
+function isVertexConnectedToPlayerRoad(state: GameState, vertexId: number, playerId: string): boolean {
   // Find all edges connected to this vertex
   const connectedEdges = state.board.edges.filter(e => 
     e.vertexIds.includes(vertexId)
@@ -391,28 +390,22 @@ function isVertexConnectedToPlayerRoad(state: GameState, vertexId: string, playe
   return connectedEdges.some(e => e.road?.playerId === playerId);
 }
 
-function isVertexDistanceValid(state: GameState, vertexId: string): boolean {
+function isVertexDistanceValid(state: GameState, vertexId: number): boolean {
   const vertex = state.board.vertices.find(v => v.id === vertexId);
   if (!vertex) {
     console.log(`⚠️  Distance check: vertex ${vertexId} not found`);
     return false;
   }
 
-  // Find all adjacent vertices (connected by an edge)
-  const adjacentVertexIds = state.board.edges
-    .filter(e => e.vertexIds.includes(vertexId))
-    .flatMap(e => e.vertexIds)
-    .filter(id => id !== vertexId);
-
   console.log(`🔍 Distance check for vertex ${vertexId}:`);
-  console.log(`   Adjacent vertices (${adjacentVertexIds.length}):`, adjacentVertexIds.slice(0, 3));
+  console.log(`   Adjacent vertices (${vertex.adjacentVertexIds.length}): [${vertex.adjacentVertexIds.slice(0, 5).join(', ')}...]`);
 
-  // Check if any adjacent vertex has a building
-  const violatesRule = adjacentVertexIds.some(id => {
-    const adjacentVertex = state.board.vertices.find(v => v.id === id);
+  // Check if any adjacent vertex has a building - NOW SUPER SIMPLE!
+  const violatesRule = vertex.adjacentVertexIds.some(adjId => {
+    const adjacentVertex = state.board.vertices.find(v => v.id === adjId);
     const hasBuilding = adjacentVertex?.building !== undefined;
     if (hasBuilding) {
-      console.log(`   ❌ Adjacent vertex ${id} has ${adjacentVertex.building?.type} owned by ${adjacentVertex.building?.playerId}`);
+      console.log(`   ❌ Adjacent vertex ${adjId} has ${adjacentVertex.building?.type} owned by ${adjacentVertex.building?.playerId}`);
     }
     return hasBuilding;
   });
@@ -429,4 +422,3 @@ export function getCurrentPlayer(state: GameState): Player {
 export function getTotalResources(resources: Resources): number {
   return Object.values(resources).reduce((sum, val) => sum + val, 0);
 }
-

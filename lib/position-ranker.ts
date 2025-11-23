@@ -3,7 +3,7 @@
 import { GameState, Vertex, Edge } from './types';
 
 interface RankedVertex {
-  id: string;
+  id: number;
   hexIds: string[];
   score: number;
   reasoning: string;
@@ -12,8 +12,8 @@ interface RankedVertex {
 }
 
 interface RankedEdge {
-  id: string;
-  vertexIds: string[];
+  id: number;
+  vertexIds: number[];
   score: number;
   reasoning: string;
 }

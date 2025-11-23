@@ -2,8 +2,8 @@
 // Esto permite que los agentes usen números pero el sistema use IDs internamente
 
 interface OptionMap {
-  vertices: Map<number, string>; // opción → vertexId
-  edges: Map<number, string>;    // opción → edgeId
+  vertices: Map<number, number>; // opción → vertexId (numeric)
+  edges: Map<number, number>;    // opción → edgeId (numeric)
   timestamp: number;
 }
 
@@ -15,11 +15,11 @@ const optionMaps = new Map<string, OptionMap>();
  */
 export function saveOptionMap(
   playerId: string,
-  vertexOptions: Array<{ id: string }>,
-  edgeOptions: Array<{ id: string }>
+  vertexOptions: Array<{ id: number }>,
+  edgeOptions: Array<{ id: number }>
 ): void {
-  const vertices = new Map<number, string>();
-  const edges = new Map<number, string>();
+  const vertices = new Map<number, number>();
+  const edges = new Map<number, number>();
 
   vertexOptions.forEach((v, index) => {
     vertices.set(index + 1, v.id); // 1-indexed
@@ -46,7 +46,7 @@ export function saveOptionMap(
 export function getVertexIdFromOption(
   playerId: string,
   option: number
-): string | null {
+): number | null {
   const map = optionMaps.get(playerId);
   if (!map) {
     console.error(`❌ No option map found for player ${playerId}`);
@@ -70,7 +70,7 @@ export function getVertexIdFromOption(
 export function getEdgeIdFromOption(
   playerId: string,
   option: number
-): string | null {
+): number | null {
   const map = optionMaps.get(playerId);
   if (!map) {
     console.error(`❌ No option map found for player ${playerId}`);

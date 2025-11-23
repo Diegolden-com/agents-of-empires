@@ -21,6 +21,8 @@ function serializeGameState(state: GameState) {
       vertices: state.board.vertices.map(v => ({
         id: v.id,
         hexIds: v.hexIds,
+        position: v.position,  // ✅ Incluir coordenadas para rendering
+        adjacentVertexIds: v.adjacentVertexIds,  // ✅ Incluir adyacencias
         building: v.building,
       })),
       edges: state.board.edges.map(e => ({
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
       try {
         // Read agent selections from request body
         const body = await req.json();
-        const { agentIds } = body as { agentIds: string[] };
+        const { agentIds, llmConfigs } = body as { agentIds: string[]; llmConfigs?: Record<string, any> };
 
         if (!agentIds || agentIds.length < 2 || agentIds.length > 4) {
           send({ type: 'error', message: 'Need 2-4 agent IDs' });
@@ -73,7 +75,19 @@ export async function POST(req: NextRequest) {
         }
 
         // Get agent configurations
-        const agentConfigs = agentIds.map(id => getAgentById(id)).filter(Boolean);
+        const agentConfigs = agentIds.map(id => {
+          const agent = getAgentById(id);
+          if (!agent) return null;
+          
+          // ✨ Override LLM config if provided
+          if (llmConfigs && llmConfigs[id]) {
+            return {
+              ...agent,
+              llmConfig: llmConfigs[id],
+            };
+          }
+          return agent;
+        }).filter(Boolean);
         
         if (agentConfigs.length !== agentIds.length) {
           send({ type: 'error', message: 'Invalid agent IDs' });
@@ -82,6 +96,11 @@ export async function POST(req: NextRequest) {
         }
 
         console.log('🎲 Catan AI Game starting:', agentConfigs.map(a => a!.name).join(' vs '));
+        
+        // ✨ Log LLM configurations
+        agentConfigs.forEach(agent => {
+          console.log(`  - ${agent!.name}: ${agent!.llmConfig.provider}/${agent!.llmConfig.model} (temp: ${agent!.llmConfig.temperature})`);
+        });
 
         // Create game
         const playerNames = agentConfigs.map(a => a!.name);

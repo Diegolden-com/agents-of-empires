@@ -1,4 +1,4 @@
-// Generates the classic Catan board layout
+// Generates the classic Catan board layout with SIMPLE NUMERIC IDs
 
 import { Board, HexTile, Vertex, Edge, TerrainType } from './types';
 
@@ -71,20 +71,24 @@ export function generateBoard(): Board {
     position: pos,
   }));
 
-  // Generate vertices (each hex has 6 vertices)
-  const vertexMap = new Map<string, Vertex>();
+  // Generate vertices with SIMPLE NUMERIC IDs
+  // Map from coordinate string to vertex data
+  const vertexCoordMap = new Map<string, { id: number; position: { q: number; r: number; s: number }; hexIds: string[] }>();
+  let nextVertexId = 1;
   
   hexes.forEach(hex => {
     const hexVertices = getHexVertices(hex.position);
     hexVertices.forEach(vertexPos => {
-      const vertexId = `v_${vertexPos.q}_${vertexPos.r}_${vertexPos.s}`;
-      if (!vertexMap.has(vertexId)) {
-        vertexMap.set(vertexId, {
-          id: vertexId,
+      const coordKey = `${vertexPos.q},${vertexPos.r},${vertexPos.s}`;
+      
+      if (!vertexCoordMap.has(coordKey)) {
+        vertexCoordMap.set(coordKey, {
+          id: nextVertexId++,
+          position: vertexPos,  // ✅ Guardamos las coordenadas cúbicas
           hexIds: [hex.id],
         });
       } else {
-        const vertex = vertexMap.get(vertexId)!;
+        const vertex = vertexCoordMap.get(coordKey)!;
         if (!vertex.hexIds.includes(hex.id)) {
           vertex.hexIds.push(hex.id);
         }
@@ -92,101 +96,77 @@ export function generateBoard(): Board {
     });
   });
 
-  const vertices = Array.from(vertexMap.values());
-
-  // Generate edges (connecting adjacent vertices)
-  const edgeMap = new Map<string, Edge>();
-  let edgesAttempted = 0;
-  let edgesRejected = 0;
-  let edgesCreated = 0;
-  let edgesDuplicate = 0;
+  // Build adjacency map for vertices
+  // Two vertices are adjacent if they are on the same hex and consecutive
+  const adjacencyMap = new Map<number, Set<number>>();
   
-  // For each hex, connect its 6 vertices in order (forming a hexagon)
-  hexes.forEach((hex, hexIndex) => {
+  hexes.forEach(hex => {
     const hexVertices = getHexVertices(hex.position);
-    const vertexIds = hexVertices.map(pos => `v_${pos.q}_${pos.r}_${pos.s}`);
-    const vertexCoords = hexVertices;
+    const vertexIds = hexVertices.map(pos => {
+      const coordKey = `${pos.q},${pos.r},${pos.s}`;
+      return vertexCoordMap.get(coordKey)!.id;
+    });
     
-    // Connect each vertex to the next one (and last to first)
+    // Connect consecutive vertices around the hexagon
     for (let i = 0; i < vertexIds.length; i++) {
-      const v1Id = vertexIds[i];
-      const v2Id = vertexIds[(i + 1) % vertexIds.length];
-      const v1Coords = vertexCoords[i];
-      const v2Coords = vertexCoords[(i + 1) % vertexIds.length];
+      const v1 = vertexIds[i];
+      const v2 = vertexIds[(i + 1) % vertexIds.length];
       
-      edgesAttempted++;
+      if (!adjacencyMap.has(v1)) adjacencyMap.set(v1, new Set());
+      if (!adjacencyMap.has(v2)) adjacencyMap.set(v2, new Set());
       
-      // CRITICAL: Verify vertices are actually adjacent
-      // Adjacent vertices on a hex should have Chebyshev distance (max of |dq|, |dr|, |ds|) = 1
-      const dq = Math.abs(v1Coords.q - v2Coords.q);
-      const dr = Math.abs(v1Coords.r - v2Coords.r);
-      const ds = Math.abs(v1Coords.s - v2Coords.s);
-      const chebyshevDistance = Math.max(dq, dr, ds);
-      
-      if (chebyshevDistance !== 1) {
-        console.error(`⚠️ Hex ${hexIndex} (${hex.id}): Rejecting edge ${i}→${(i+1)%6}`);
-        console.error(`   ${v1Id} to ${v2Id}`);
-        console.error(`   Chebyshev distance: ${chebyshevDistance} (must be 1)`);
-        console.error(`   Delta: (${dq}, ${dr}, ${ds})`);
-        edgesRejected++;
-        continue;
-      }
-      
-      // Create edge with sorted IDs to avoid duplicates
-      const [first, second] = v1Id < v2Id ? [v1Id, v2Id] : [v2Id, v1Id];
-      const edgeId = `e_${first}_${second}`;
-      
-      if (edgeMap.has(edgeId)) {
-        edgesDuplicate++;
-      } else {
-        edgeMap.set(edgeId, {
-          id: edgeId,
-          vertexIds: [first, second],
-        });
-        edgesCreated++;
-      }
+      adjacencyMap.get(v1)!.add(v2);
+      adjacencyMap.get(v2)!.add(v1);
     }
   });
-  
-  console.log(`   Edge generation stats:`);
-  console.log(`     - Attempted: ${edgesAttempted}`);
-  console.log(`     - Rejected (invalid distance): ${edgesRejected}`);
-  console.log(`     - Created (unique): ${edgesCreated}`);
-  console.log(`     - Duplicates (shared between hexes): ${edgesDuplicate}`);
 
-  const edges = Array.from(edgeMap.values());
+  // Create final vertex array with adjacency info
+  const vertices: Vertex[] = Array.from(vertexCoordMap.values()).map(v => ({
+    id: v.id,
+    hexIds: v.hexIds,
+    position: v.position,  // ✅ Incluimos las coordenadas cúbicas para rendering
+    adjacentVertexIds: Array.from(adjacencyMap.get(v.id) || []).sort((a, b) => a - b),
+  }));
+
+  // Sort vertices by ID for consistency
+  vertices.sort((a, b) => a.id - b.id);
+
+  // Generate edges with SIMPLE NUMERIC IDs
+  const edges: Edge[] = [];
+  const edgeSet = new Set<string>();
+  let nextEdgeId = 1;
   
-  console.log(`\n🎲 Board generated: ${hexes.length} hexes, ${vertices.length} vertices, ${edges.length} edges`);
-  console.log(`   Expected edges: ${hexes.length * 6} (before deduplication)`);
-  
-  // VALIDATE: Each edge should connect vertices that are EXACTLY 1 Chebyshev distance apart
-  let invalidEdgeCount = 0;
-  edges.forEach(edge => {
-    const [v1Id, v2Id] = edge.vertexIds;
-    const v1Parts = v1Id.split('_');
-    const v2Parts = v2Id.split('_');
-    const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
-    const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
-    
-    const dq = Math.abs(v1Coords.q - v2Coords.q);
-    const dr = Math.abs(v1Coords.r - v2Coords.r);
-    const ds = Math.abs(v1Coords.s - v2Coords.s);
-    const chebyshevDistance = Math.max(dq, dr, ds);
-    
-    if (chebyshevDistance !== 1) {
-      console.error(`⚠️ INVALID EDGE DETECTED: ${edge.id}`);
-      console.error(`   Connects ${v1Id} and ${v2Id}`);
-      console.error(`   Chebyshev Distance: ${chebyshevDistance} (should be exactly 1)`);
-      console.error(`   Delta: (${dq}, ${dr}, ${ds})`);
-      invalidEdgeCount++;
-    }
+  vertices.forEach(vertex => {
+    vertex.adjacentVertexIds.forEach(adjacentId => {
+      // Create edge key with sorted vertex IDs to avoid duplicates
+      const [v1, v2] = vertex.id < adjacentId ? [vertex.id, adjacentId] : [adjacentId, vertex.id];
+      const edgeKey = `${v1}-${v2}`;
+      
+      if (!edgeSet.has(edgeKey)) {
+        edgeSet.add(edgeKey);
+        edges.push({
+          id: nextEdgeId++,
+          vertexIds: [v1, v2],
+        });
+      }
+    });
   });
+
+  // Sort edges by ID for consistency
+  edges.sort((a, b) => a.id - b.id);
   
-  if (invalidEdgeCount > 0) {
-    console.error(`❌ Found ${invalidEdgeCount} invalid edges! Board generation has ERRORS.`);
-  } else {
-    console.log(`✅ All ${edges.length} edges are valid (Chebyshev distance = 1)`);
-  }
+  console.log(`\n🎲 Board generated with SIMPLE IDs:`);
+  console.log(`   ${hexes.length} hexes`);
+  console.log(`   ${vertices.length} vertices (IDs: 1-${vertices.length})`);
+  console.log(`   ${edges.length} edges (IDs: 1-${edges.length})`);
+  console.log(`\n✅ Sample vertices:`);
+  vertices.slice(0, 5).forEach(v => {
+    console.log(`   Vertex ${v.id}: ${v.adjacentVertexIds.length} connections → [${v.adjacentVertexIds.slice(0, 3).join(', ')}...]`);
+  });
+  console.log(`\n✅ Sample edges:`);
+  edges.slice(0, 5).forEach(e => {
+    console.log(`   Edge ${e.id}: connects vertices ${e.vertexIds[0]} ↔ ${e.vertexIds[1]}`);
+  });
 
   return { hexes, vertices, edges };
 }
@@ -200,8 +180,7 @@ function getHexVertices(hexPos: { q: number; r: number; s: number }) {
   const r = hexPos.r * 2;
   const s = hexPos.s * 2;
   
-  // CRITICAL: These offsets define the 6 corners in clockwise order
-  // Each pair of consecutive vertices should have Manhattan distance = 2
+  // These offsets define the 6 corners in clockwise order
   const vertices = [
     { q: q + 1, r: r - 1, s: s },      // 0: Top (NE)
     { q: q + 1, r: r, s: s - 1 },      // 1: Top-right (E)
@@ -211,22 +190,5 @@ function getHexVertices(hexPos: { q: number; r: number; s: number }) {
     { q: q, r: r - 1, s: s + 1 },      // 5: Top-left (NW)
   ];
   
-  // VALIDATE: Check that consecutive vertices are exactly 1 Chebyshev unit apart
-  for (let i = 0; i < vertices.length; i++) {
-    const v1 = vertices[i];
-    const v2 = vertices[(i + 1) % vertices.length];
-    const dq = Math.abs(v1.q - v2.q);
-    const dr = Math.abs(v1.r - v2.r);
-    const ds = Math.abs(v1.s - v2.s);
-    const chebyshevDist = Math.max(dq, dr, ds);
-    
-    if (chebyshevDist !== 1) {
-      console.error(`❌ INVALID HEX VERTEX ORDER at hex (${hexPos.q}, ${hexPos.r}, ${hexPos.s})`);
-      console.error(`   Vertex ${i} to ${(i + 1) % 6}: Chebyshev distance = ${chebyshevDist} (should be 1)`);
-      console.error(`   v1: (${v1.q}, ${v1.r}, ${v1.s}), v2: (${v2.q}, ${v2.r}, ${v2.s})`);
-    }
-  }
-  
   return vertices;
 }
-

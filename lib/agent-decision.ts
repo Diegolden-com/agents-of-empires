@@ -1,10 +1,30 @@
 import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
+import { mistral } from '@ai-sdk/mistral';
 import { generateText } from 'ai';
 import { z } from 'zod';
-import { AgentConfig } from './agent-configs';
+import { AgentConfig, LLMConfig } from './agent-configs';
 import { GameState, ResourceType } from './types';
 import { rankVertices, rankEdges, formatVertexOptions, formatEdgeOptions } from './position-ranker';
 import { saveOptionMap } from './option-mapper';
+
+// ✨ Función para obtener el modelo de IA según la configuración
+function getModelFromConfig(config: LLMConfig) {
+  switch (config.provider) {
+    case 'openai':
+      return openai(config.model);
+    case 'anthropic':
+      return anthropic(config.model);
+    case 'google':
+      return google(config.model);
+    case 'mistral':
+      return mistral(config.model);
+    default:
+      console.warn(`Unknown provider: ${config.provider}, falling back to OpenAI`);
+      return openai('gpt-4o-mini');
+  }
+}
 
 export const agentDecisionSchema = z.object({
   action: z.enum([
@@ -31,41 +51,48 @@ export const agentDecisionSchema = z.object({
 export type AgentDecision = z.infer<typeof agentDecisionSchema>;
 
 function getSystemPrompt(agentConfig: AgentConfig) {
-  return `You are ${agentConfig.name}, a player in Settlers of Catan.
+  return `You are ${agentConfig.name}, an expert Catan player.
 
-PERSONALITY: ${agentConfig.personality}
-STRATEGY STYLE: ${agentConfig.strategyStyle}
-TONE OF VOICE: ${agentConfig.toneOfVoice}
+🏆 WIN CONDITION: BE FIRST TO 10 VICTORY POINTS! 🏆
 
-YOUR GOALS:
-${agentConfig.goals.map((g, i) => `${i + 1}. ${g}`).join('\n')}
+CRITICAL: Every turn matters. Build aggressively. Don't waste turns!
 
-BEHAVIOR RULES (FOLLOW STRICTLY):
-${agentConfig.behaviorRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}
+📊 POINTS TO WIN:
+- Settlement = 1 VP (costs: wood+brick+sheep+wheat)
+- City = 2 VP (costs: 2 wheat + 3 ore) ← UPGRADE YOUR SETTLEMENTS!
+- Longest Road = 2 VP (need 5+ connected roads)
 
-=== CATAN GAME RULES (READ THESE RULES CAREFULLY - VIOLATIONS WILL FAIL) ===
+🎯 STRATEGY (SIMPLIFIED):
+1. SETUP: Choose numbers 6 or 8 (BEST) > 5 or 9 (GOOD) > others
+2. MAIN GAME: ALWAYS build if you have resources!
+   - Priority: City (if you have wheat+ore) > Settlement > Road to expansion
+   - Trade if you have 4+ of same resource
 
-🎯 OBJECTIVE: Be the FIRST to reach 10 VICTORY POINTS
+❌ DON'T: End turn if you can build/trade. This wastes opportunities!
+
+Your personality: ${agentConfig.personality}
+
+=== GAME MECHANICS (Technical Rules) ===
 
 📊 VICTORY POINTS:
 - Settlement: 1 VP
 - City: 2 VP  
-- Longest Road (5+ connected roads): 2 VP
-- First to 10 VP WINS!
+- Longest Road (5+ roads): 2 VP
+- **FIRST TO 10 VP WINS THE GAME!**
 
-🎮 VALID ACTIONS (use EXACTLY these names):
+🎮 VALID ACTIONS:
 
-SETUP PHASES (FREE - NO RESOURCES NEEDED):
-- "build_settlement" - Place settlement (MANDATORY in setup_settlement_1 and setup_settlement_2)
-- "build_road" - Place road (MANDATORY in setup_road_1 and setup_road_2)
+SETUP PHASES (FREE - BUILD STRATEGICALLY!):
+- "build_settlement" - Place settlement (MANDATORY - choose BEST numbers!)
+- "build_road" - Place road (MANDATORY - connect for expansion!)
 
-MAIN GAME PHASES (REQUIRES RESOURCES):
+MAIN GAME (Costs resources - BUILD TO WIN!):
 - "roll" - Roll dice (ONLY in dice_roll phase)
-- "build_road" - Build road (costs 1 wood + 1 brick)
-- "build_settlement" - Build settlement (costs 1 wood + 1 brick + 1 sheep + 1 wheat)
-- "build_city" - Upgrade settlement to city (costs 2 wheat + 3 ore)
-- "trade_bank" - Trade 4:1 with bank
-- "end_turn" - End your turn (ONLY in main phase, NOT in setup!)
+- "build_settlement" - Build settlement = +1 VP (costs: 1 wood + 1 brick + 1 sheep + 1 wheat)
+- "build_city" - Upgrade to city = +1 VP (costs: 2 wheat + 3 ore) - VERY EFFICIENT!
+- "build_road" - Build road (costs: 1 wood + 1 brick)
+- "trade_bank" - Trade 4:1 with bank (convert excess resources)
+- "end_turn" - End turn (ONLY if you can't build anything useful!)
 
 ⚠️ IN SETUP PHASES: You CANNOT end_turn! You MUST build!
 
@@ -200,12 +227,25 @@ Main phase (rolling dice):
   "reasoning": "Must roll dice to start turn"
 }
 
+🎯 EVERY TURN, CHECK IN ORDER:
+1. Can build CITY? (2 wheat + 3 ore) → DO IT! Pick option 1
+2. Can build SETTLEMENT? (wood+brick+sheep+wheat) → DO IT! Pick option 1  
+3. Can build ROAD? (wood+brick) → DO IT if useful! Pick option 1
+4. Have 4+ same resource? → TRADE 4:1 for what you need
+5. Otherwise → "end_turn"
+
+RESPOND WITH JSON ONLY (no other text):
+{
+  "action": "roll"|"build_city"|"build_settlement"|"build_road"|"trade_bank"|"end_turn",
+  "data": 1,
+  "message": "Short message",
+  "reasoning": "Why"
+}
+
 CRITICAL: 
-- Use EXACT action names from the list
-- For build actions: data is just a number (1-5)
-- Match your personality in the message
-- Keep it brief and strategic
-- Option 1 is usually best (highest score)`;
+- Option 1 is ALWAYS the best choice (highest score)
+- NEVER end_turn if you can build anything
+- In setup, MUST build (can't end_turn)`;
 }
 
 export async function getAgentDecision(
@@ -260,17 +300,25 @@ export async function getAgentDecision(
   
   // Si es fase de setup de caminos, solo mostrar edges conectados al último asentamiento
   if (gameState.phase === 'setup_road_1' || gameState.phase === 'setup_road_2') {
-    const playerVertices = gameState.board.vertices.filter(v => 
-      v.building && v.building.playerId === playerId
-    );
+    // Use lastSettlementId if available (reliable)
+    let settlementId = gameState.lastSettlementId;
     
-    if (playerVertices.length > 0) {
-      const lastSettlement = playerVertices[playerVertices.length - 1];
+    // Fallback logic if not set (shouldn't happen with new engine)
+    if (settlementId === undefined) {
+       const playerVertices = gameState.board.vertices.filter(v => 
+        v.building && v.building.playerId === playerId
+      );
+      if (playerVertices.length > 0) {
+        settlementId = playerVertices[playerVertices.length - 1].id;
+      }
+    }
+
+    if (settlementId !== undefined) {
       // Solo edges que conectan al último asentamiento
       availableEdgesRaw = availableEdgesRaw.filter(e => 
-        e.vertexIds.includes(lastSettlement.id)
+        e.vertexIds.includes(settlementId!)
       );
-      console.log(`🔍 Setup road phase: Found ${availableEdgesRaw.length} edges connected to last settlement ${lastSettlement.id}`);
+      console.log(`🔍 Setup road phase: Found ${availableEdgesRaw.length} edges connected to last settlement ${settlementId}`);
     }
   } else if (!gameState.phase.startsWith('setup') && gameState.phase !== 'dice_roll') {
     // En fase main, mostrar edges conectados a estructuras del jugador
@@ -297,34 +345,11 @@ export async function getAgentDecision(
   }
 
   // CRITICAL: Validate ALL edges before ranking them
-  console.log(`\n🔍 Validating ${availableEdgesRaw.length} available edges for ${player.name}`);
-  const validEdges = availableEdgesRaw.filter(edge => {
-    const [v1Id, v2Id] = edge.vertexIds;
-    const v1Parts = v1Id.split('_');
-    const v2Parts = v2Id.split('_');
-    const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
-    const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
-    
-    const dq = Math.abs(v1Coords.q - v2Coords.q);
-    const dr = Math.abs(v1Coords.r - v2Coords.r);
-    const ds = Math.abs(v1Coords.s - v2Coords.s);
-    const chebyshevDist = Math.max(dq, dr, ds);
-    
-    if (chebyshevDist !== 1) {
-      console.error(`❌ FILTERING OUT INVALID EDGE: ${edge.id}`);
-      console.error(`   Connects ${v1Id} and ${v2Id}`);
-      console.error(`   Chebyshev distance: ${chebyshevDist} (must be 1)`);
-      return false;
-    }
-    return true;
-  });
-  
-  if (validEdges.length < availableEdgesRaw.length) {
-    console.error(`⚠️ Filtered out ${availableEdgesRaw.length - validEdges.length} invalid edges`);
-  }
+  // With numeric IDs and adjacentVertexIds, all edges are guaranteed valid by construction
+  console.log(`\n🔍 Found ${availableEdgesRaw.length} available edges for ${player.name}`);
   
   // Rankear y obtener las mejores 5 opciones
-  const rankedEdges = rankEdges(validEdges, gameState, playerId, 5);
+  const rankedEdges = rankEdges(availableEdgesRaw, gameState, playerId, 5);
   const edgeOptionsText = formatEdgeOptions(rankedEdges);
 
   console.log(`🎯 Generated ${rankedEdges.length} edge options for ${player.name}`);
@@ -532,13 +557,20 @@ Remember: You are ${agentConfig.name}. ${agentConfig.personality}
 Respond with valid JSON only.`;
 
   try {
+    // ✨ Usar el LLM configurado para este agente
+    const model = getModelFromConfig(agentConfig.llmConfig);
+    const temperature = agentConfig.llmConfig.temperature ?? 0.7;
+    const maxTokens = agentConfig.llmConfig.maxTokens ?? 300;
+    
+    console.log(`[${agentConfig.name}] Using ${agentConfig.llmConfig.provider}/${agentConfig.llmConfig.model} (temp: ${temperature})`);
+    
     const result = await generateText({
-      model: openai('gpt-4o-mini'), // Mucho más rápido y económico
+      model: model as any,
       system: getSystemPrompt(agentConfig),
       prompt,
-      temperature: 0.7, // Un poco menos creativo pero más consistente
-      maxTokens: 300, // Reducido para respuestas más rápidas
-    });
+      temperature,
+      maxTokens: maxTokens, // Back to maxTokens for SDK 5
+    } as any); // Type override for multi-provider compatibility
 
     const fullText = result.text;
 

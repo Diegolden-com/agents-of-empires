@@ -103,14 +103,9 @@ export function getGameStateForAgent(state: GameState, playerId: string): any {
           if (v.building) return false;
           
           // CRITICAL: Check distance rule - no settlements within 1 edge distance
-          const adjacentVertexIds = state.board.edges
-            .filter(e => e.vertexIds.includes(v.id))
-            .flatMap(e => e.vertexIds)
-            .filter(id => id !== v.id);
-          
-          // Verify no adjacent vertex has a building
-          const hasAdjacentBuilding = adjacentVertexIds.some(id => {
-            const adjacentVertex = state.board.vertices.find(vertex => vertex.id === id);
+          // NOW SUPER SIMPLE with adjacentVertexIds!
+          const hasAdjacentBuilding = v.adjacentVertexIds.some(adjId => {
+            const adjacentVertex = state.board.vertices.find(vertex => vertex.id === adjId);
             return adjacentVertex?.building !== undefined;
           });
           
@@ -129,14 +124,22 @@ export function getGameStateForAgent(state: GameState, playerId: string): any {
         
         // In setup road phases, only show edges connected to player's LAST settlement
         if (state.phase === 'setup_road_1' || state.phase === 'setup_road_2') {
-          const playerSettlements = state.board.vertices.filter(v => 
-            v.building && v.building.playerId === playerId && v.building.type === 'settlement'
-          );
+          // Use lastSettlementId if available
+          let settlementId = state.lastSettlementId;
           
-          if (playerSettlements.length > 0) {
-            const lastSettlement = playerSettlements[playerSettlements.length - 1];
+          // Fallback if not set (shouldn't happen)
+          if (settlementId === undefined) {
+            const playerSettlements = state.board.vertices.filter(v => 
+              v.building && v.building.playerId === playerId && v.building.type === 'settlement'
+            );
+            if (playerSettlements.length > 0) {
+              settlementId = playerSettlements[playerSettlements.length - 1].id;
+            }
+          }
+
+          if (settlementId !== undefined) {
             // CRITICAL: In setup, only edges connected to LAST settlement are valid
-            edges = edges.filter(e => e.vertexIds.includes(lastSettlement.id));
+            edges = edges.filter(e => e.vertexIds.includes(settlementId!));
           }
         } else if (!state.phase.startsWith('setup') && state.phase !== 'dice_roll') {
           // In main game, show edges connected to player's network
@@ -159,32 +162,9 @@ export function getGameStateForAgent(state: GameState, playerId: string): any {
           });
         }
         
-        // CRITICAL: Final validation - only return edges with adjacent vertices
-        const validEdges = edges.filter(e => {
-          const [v1Id, v2Id] = e.vertexIds;
-          const v1Parts = v1Id.split('_');
-          const v2Parts = v2Id.split('_');
-          const v1Coords = { q: parseInt(v1Parts[1]), r: parseInt(v1Parts[2]), s: parseInt(v1Parts[3]) };
-          const v2Coords = { q: parseInt(v2Parts[1]), r: parseInt(v2Parts[2]), s: parseInt(v2Parts[3]) };
-          
-          const chebyshevDist = Math.max(
-            Math.abs(v1Coords.q - v2Coords.q),
-            Math.abs(v1Coords.r - v2Coords.r),
-            Math.abs(v1Coords.s - v2Coords.s)
-          );
-          
-          if (chebyshevDist !== 1) {
-            console.error(`⚠️ Agent Interface: Filtering invalid edge ${e.id} (Chebyshev dist=${chebyshevDist})`);
-            return false;
-          }
-          return true;
-        });
-        
-        if (validEdges.length < edges.length) {
-          console.error(`⚠️ Agent Interface filtered out ${edges.length - validEdges.length} invalid edges`);
-        }
-        
-        return validEdges.map(e => ({ id: e.id, vertices: e.vertexIds }));
+        // With numeric IDs and adjacentVertexIds, validation is built into board generation
+        // No need for extra validation here
+        return edges.map(e => ({ id: e.id, vertices: e.vertexIds }));
       })(),
     },
     possibleActions: getPossibleActions(state, playerId),
@@ -266,8 +246,8 @@ export function executeAgentAction(state: GameState, playerId: string, action: A
         return { success: true, message: `Rolled ${dice[0]} + ${dice[1]} = ${total}`, newState: state };
 
       case 'build_road':
-        // NEW: Support numeric option (1-5) or old edgeId format
-        let edgeId: string | null = null;
+        // NEW: Support numeric option (1-5) or edgeId (number)
+        let edgeId: number | null = null;
         
         console.log(`\n🛣️  BUILD_ROAD requested by ${player.name}`);
         console.log(`   Action data:`, action.data);
@@ -350,8 +330,8 @@ export function executeAgentAction(state: GameState, playerId: string, action: A
         return { success: true, message: 'Road built successfully', newState: state };
 
       case 'build_settlement':
-        // NEW: Support numeric option (1-5) or old vertexId format
-        let vertexId: string | null = null;
+        // NEW: Support numeric option (1-5) or vertexId (number)
+        let vertexId: number | null = null;
         
         console.log(`\n🏗️  BUILD_SETTLEMENT requested by ${player.name}`);
         console.log(`   Action data:`, action.data);
