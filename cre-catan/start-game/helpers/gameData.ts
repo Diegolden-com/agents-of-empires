@@ -5,6 +5,8 @@ import {
   encodeCallMsg,
   LATEST_BLOCK_NUMBER,
   cre,
+  type HTTPSendRequester,
+  ok,
 } from "@chainlink/cre-sdk";
 import {
   Address,
@@ -210,22 +212,34 @@ export const readGameFromBlockchain = async (
   }
 };
 
-const logGameData = (runtime: Runtime<Config>, gamePayload: GamePayload) => {
-  runtime.log("=".repeat(50));
-  runtime.log("COMPLETE GAME DATA:");
-  runtime.log("=".repeat(50));
+const httpRequest = async (sendRequester: HTTPSendRequester, gamePayload: GamePayload, apiUrl: string) => {
+  const bodyBytes = new TextEncoder().encode(JSON.stringify(gamePayload));
+  const body = Buffer.from(bodyBytes).toString('base64');
 
-  // Log basic game info
-  runtime.log(`Game ID: ${gamePayload.gameId}`);
-  runtime.log(`Bettor: ${gamePayload.bettor}`);
-  runtime.log(`Deposit: ${gamePayload.deposit}`);
-  runtime.log(`Status: ${gamePayload.status}`);
-  runtime.log(`Random Ready: ${gamePayload.randomReady}`);
-  runtime.log(`Bettor Choice: ${gamePayload.bettorChoice}`);
-  runtime.log(`Request ID: ${gamePayload.requestId}`);
-  runtime.log(`Start Time: ${gamePayload.startTime}`);
-  runtime.log(`End Time: ${gamePayload.endTime}`);
-  runtime.log(`Winner: ${gamePayload.winner}`);
+  const req = {
+    url: apiUrl,
+    method: 'POST' as const,
+    body: body,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    cacheSettings: {
+      readFromCache: true,
+      maxAgeMs: 60000,
+    }
+  };
+
+  const response = sendRequester.sendRequest(req).result();
+
+  if(!ok(response)) {
+    throw new Error(`Failed to send request: ${response}`);
+  }
+
+  return { statusCode: response.statusCode };
+};
+
+const logGameData = (runtime: Runtime<Config>, gamePayload: GamePayload) => {
+
 
   // Log AI Players
   runtime.log("\n" + "-".repeat(50));

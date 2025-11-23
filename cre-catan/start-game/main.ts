@@ -15,6 +15,10 @@ type Config = {
   gameControllerAddress: string;
 };
 
+type PostResponse = {
+  statusCode: number;
+};
+
 // Define all events from GameController.sol
 const eventAbi = parseAbi(["event GameActivated(uint256 indexed gameId)"]);
 
