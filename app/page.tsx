@@ -9,6 +9,7 @@ import { Play, Zap, Brain, Shield, Sparkles, ChevronDown, ChevronUp, Settings } 
 import { CatanBoardWithBuildings } from '@/components/catan-board-with-buildings';
 import { ResourceLog } from '@/components/resource-log';
 import { Navbar } from '@/components/navbar';
+import { useGameController } from '@/lib/hooks/useGameController';
 
 // ✨ Configuraciones de LLM disponibles
 const LLM_OPTIONS: Record<string, { label: string; models: { value: string; label: string; cost: string }[] }> = {
@@ -53,13 +54,16 @@ export default function AIBattlePage() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [showEventDetails, setShowEventDetails] = useState(true);
   const [showLLMConfig, setShowLLMConfig] = useState(false);
-  const [blockchainGameId, setBlockchainGameId] = useState<string>('1'); // GameID desde blockchain
+  const [blockchainGameId, setBlockchainGameId] = useState<string>(''); // GameID desde blockchain
   const [gameStatus, setGameStatus] = useState<'idle' | 'pending_vrf' | 'ready' | 'active' | 'finished'>('idle');
   const [isRegistering, setIsRegistering] = useState(false);
   const [isStartingBattle, setIsStartingBattle] = useState(false);
   const [dbGame, setDbGame] = useState<any>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [isFinishing, setIsFinishing] = useState(false);
+
+  // Web3 integration
+  const { authenticated, login, startGame: startGameOnChain, isLoading: isWeb3Loading, wallets } = useGameController();
 
   const statusLabels: Record<string, string> = {
     idle: 'Not generated',
@@ -114,11 +118,14 @@ export default function AIBattlePage() {
   }
 
   async function registerBattle() {
-    if (selectedAgents.length < 2) return;
+    if (selectedAgents.length < 2) {
+      setStatusError('Select at least 2 agents');
+      return;
+    }
 
-    const parsedGameId = parseInt(blockchainGameId);
-    if (Number.isNaN(parsedGameId)) {
-      setStatusError('Invalid Game ID');
+    if (!authenticated) {
+      setStatusError('Please connect your wallet first');
+      await login();
       return;
     }
 
@@ -126,19 +133,45 @@ export default function AIBattlePage() {
     setStatusError(null);
 
     try {
+      // Llamar al smart contract para iniciar el juego
+      // bettorChoice es el índice del agente que el usuario está apostando (0-3)
+      const bettorChoice = 2; // Siempre usar el índice 2
+
+      console.log('🎮 Calling smart contract startGame...');
+      const result = await startGameOnChain(bettorChoice);
+
+      if (!result) {
+        setStatusError('Failed to start game on blockchain');
+        return;
+      }
+
+      const { gameId: onChainGameId, txHash, requestId } = result;
+
+      console.log('✅ Game started on blockchain:', {
+        gameId: onChainGameId,
+        txHash,
+        requestId,
+      });
+
+      // Actualizar el blockchainGameId en el estado
+      setBlockchainGameId(onChainGameId.toString());
+
+      // Registrar el juego en la base de datos
       const response = await fetch('/api/game/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          gameId: parsedGameId,
+          gameId: onChainGameId,
           agentIds: selectedAgents,
+          txHash,
+          requestId,
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setStatusError(data?.error || 'Could not register the game');
+        setStatusError(data?.error || 'Could not register the game in database');
         return;
       }
 
@@ -148,9 +181,9 @@ export default function AIBattlePage() {
       setGameState(null);
       setDbGame(data.data);
       setGameStatus(data.data?.status || 'pending_vrf');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Register battle error:', error);
-      setStatusError(`Error registering game: ${error}`);
+      setStatusError(error.message || `Error registering game: ${error}`);
     } finally {
       setIsRegistering(false);
     }
@@ -412,16 +445,23 @@ export default function AIBattlePage() {
                     <label className="block text-sm font-semibold text-blue-900 mb-2">
                       🔗 Blockchain Game ID
                     </label>
-                    <input
-                      type="number"
-                      value={blockchainGameId}
-                      onChange={(e) => setBlockchainGameId(e.target.value)}
-                      placeholder="Enter blockchain game ID"
-                      className="w-full p-2 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      min="1"
-                    />
+                    {blockchainGameId ? (
+                      <div className="flex items-center justify-between p-3 bg-white border border-blue-300 rounded">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                          <span className="font-mono text-lg font-bold text-blue-900">
+                            Game #{blockchainGameId}
+                          </span>
+                        </div>
+                        <Badge variant="default">On-chain</Badge>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-white border border-blue-300 rounded text-center text-gray-500 text-sm">
+                        Game ID will appear here after blockchain confirmation
+                      </div>
+                    )}
                     <p className="text-xs text-blue-600 mt-1">
-                      This ID must match the game created on-chain
+                      This ID is generated automatically from the smart contract
                     </p>
                     <div className="flex items-center justify-between mt-2 text-xs text-blue-900">
                       <span className="font-semibold">State in DB</span>
@@ -552,15 +592,28 @@ export default function AIBattlePage() {
               )}
 
               <div className="space-y-2">
+                {!authenticated && (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-2">
+                    <p className="text-sm text-yellow-900 text-center">
+                      ⚠️ Connect your wallet using the button in the navbar to start a battle
+                    </p>
+                  </div>
+                )}
+                {statusError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-2">
+                    <p className="text-sm text-red-900 font-semibold">Error:</p>
+                    <p className="text-sm text-red-700 mt-1">{statusError}</p>
+                  </div>
+                )}
                 <Button
                   onClick={registerBattle}
-                  disabled={selectedAgents.length < 2 || !blockchainGameId || isRegistering}
+                  disabled={selectedAgents.length < 2 || isRegistering || !authenticated || isWeb3Loading}
                   size="lg"
                   variant="outline"
                   className="w-full"
                 >
                   <Zap className="mr-2" />
-                  Generar battle (VRF / registro)
+                  {isRegistering ? 'Generating on blockchain...' : 'Generate Battle (VRF / Registry)'}
                 </Button>
                 <Button
                   onClick={startBattle}

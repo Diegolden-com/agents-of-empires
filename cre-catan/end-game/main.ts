@@ -6,6 +6,9 @@ import {
   getNetwork,
   hexToBase64,
   TxStatus,
+  consensusIdenticalAggregation,
+  type HTTPSendRequester,
+  ok,
 } from "@chainlink/cre-sdk";
 import { encodeAbiParameters, parseAbiParameters } from "viem";
 import { z } from "zod";
@@ -21,6 +24,10 @@ const configSchema = z.object({
 });
 
 type Config = z.infer<typeof configSchema>;
+
+type PostResponse = {
+  statusCode: number;
+};
 
 const endGameOnchain = (runtime: Runtime<Config>): string => {
   runtime.log("=".repeat(50));
@@ -39,7 +46,9 @@ const endGameOnchain = (runtime: Runtime<Config>): string => {
   }
 
   // Create EVM client
-  const evmClient = new cre.capabilities.EVMClient(network.chainSelector.selector);
+  const evmClient = new cre.capabilities.EVMClient(
+    network.chainSelector.selector
+  );
 
   // 1. Encode report data (gameId, winner)
   const reportData = encodeAbiParameters(
@@ -47,7 +56,9 @@ const endGameOnchain = (runtime: Runtime<Config>): string => {
     [BigInt(runtime.config.gameId), runtime.config.winner]
   );
 
-  runtime.log(`Encoded data for Game ${runtime.config.gameId}, Winner: ${runtime.config.winner}`);
+  runtime.log(
+    `Encoded data for Game ${runtime.config.gameId}, Winner: ${runtime.config.winner}`
+  );
 
   // 2. Generate signed report
   const reportResponse = runtime
@@ -76,12 +87,63 @@ const endGameOnchain = (runtime: Runtime<Config>): string => {
   if (writeResult.txStatus === TxStatus.SUCCESS) {
     const txHash = bytesToHex(writeResult.txHash || new Uint8Array(32));
     runtime.log(`Transaction successful: ${txHash}`);
-    runtime.log(`Game ${runtime.config.gameId} ended. Winner: Player ${runtime.config.winner}`);
+    runtime.log(
+      `Game ${runtime.config.gameId} ended. Winner: Player ${runtime.config.winner}`
+    );
     runtime.log("=".repeat(50));
     return txHash;
   }
 
   throw new Error(`Transaction failed with status: ${writeResult.txStatus}`);
+};
+
+const callFisher = async (
+  runtime: Runtime<Config>,
+  gameId: number,
+  apiUrl: string,
+  gamePayload: any
+) => {
+  const httpClient = new cre.capabilities.HTTPClient();
+  const result = httpClient
+    .sendRequest(
+      runtime,
+      httpRequest(gamePayload, apiUrl),
+      consensusIdenticalAggregation<PostResponse>()
+    )(runtime.config)
+    .result();
+
+  runtime.log(
+    `✓ Game ${gamePayload.gameId} data sent to API with status: ${result.statusCode}`
+  );
+  return `Game ${gameId.toString()} ended successfully`;
+};
+
+export const httpRequest = (gamePayload: any, apiUrl: string) => {
+  return (sendRequester: HTTPSendRequester, config: Config) => {
+    const bodyBytes = new TextEncoder().encode(JSON.stringify(gamePayload));
+    const body = Buffer.from(bodyBytes).toString("base64");
+
+    const req = {
+      url: apiUrl,
+      method: "POST" as const,
+      body: body,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      cacheSettings: {
+        readFromCache: true,
+        maxAgeMs: 60000,
+      },
+    };
+
+    const response = sendRequester.sendRequest(req).result();
+
+    if (!ok(response)) {
+      throw new Error(`Failed to send request: ${response.statusCode}`);
+    }
+
+    return { statusCode: response.statusCode };
+  };
 };
 
 const initWorkflow = (config: Config) => {

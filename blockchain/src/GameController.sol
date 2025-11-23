@@ -3,7 +3,6 @@ pragma solidity ^0.8.20;
 
 import "./GameVRFConsumer.sol";
 
-// ADDRESS DEPLOYED: 0xCE21A1Ee76726Bb487684330BB216E5f233A47fb
 contract GameController {
     address public owner;
     GameVRFConsumer public vrf;
@@ -31,12 +30,12 @@ contract GameController {
     }
 
     enum Resource {
-        WOOD,        // Wood 0 
-        SHEEP,       // Sheep 1
-        WHEAT,       // Wheat 2
-        BRICK,       // Brick 3
-        ORE,         // Ore 4
-        DESERT       // Desert (no produce) 5
+        WOOD,        // Wood
+        SHEEP,       // Sheep
+        WHEAT,       // Wheat
+        BRICK,       // Brick
+        ORE,         // Ore
+        DESERT       // Desert (no produce)
     }
 
     uint256 constant TOTAL_COMPANIES = 5;
@@ -145,9 +144,10 @@ contract GameController {
     /**
      * @notice Start a new Catan game with 4 AI players
      * @param bettorChoice Which AI player the bettor bets on (0-3)
+     * @param useNativePayment Whether to use native payment for VRF
      * @return gameId The ID of the newly created game
      */
-    function startGame(uint8 bettorChoice)
+    function startGame(uint8 bettorChoice, bool useNativePayment)
         external
         payable
         returns (uint256 gameId)
@@ -158,7 +158,7 @@ contract GameController {
         gameCounter++;
         gameId = gameCounter;
 
-        uint256 requestId = vrf.requestRandomWords(gameId, true);
+        uint256 requestId = vrf.requestRandomWords(gameId, useNativePayment);
 
         // Create game in storage
         Game storage g = games[gameId];

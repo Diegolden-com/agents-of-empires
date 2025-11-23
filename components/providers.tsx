@@ -49,6 +49,21 @@ export default function Providers({children, appId}: {children: React.ReactNode,
               },
             },
           },
+          {
+            id: 84532,
+            name: 'Base Sepolia',
+            network: 'base-sepolia',
+            nativeCurrency: {
+              name: 'Ether',
+              symbol: 'ETH',
+              decimals: 18,
+            },
+            rpcUrls: {
+              default: {
+                http: ['https://sepolia.base.org'],
+              },
+            },
+          },
         ],
       }}
     >

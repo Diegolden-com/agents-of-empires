@@ -49,6 +49,8 @@
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
+    "unstorage": "^1.17.3",
+    "viem": "^2.39.3",
     "zod": "^3.23.8",
     "zustand": "^5.0.1"
   },
