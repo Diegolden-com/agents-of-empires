@@ -10,8 +10,6 @@ const ABI = [
 // Default batch size for processing moves
 const DEFAULT_BATCH_SIZE = 10;
 
-type GameMove = Database['public']['Tables']['game_moves']['Row'];
-
 export async function POST(request: Request) {
     try {
         // Parse query parameters
@@ -93,18 +91,48 @@ export async function POST(request: Request) {
                 .eq('id', move.id);
 
             try {
+                // Validate that agent is a valid Ethereum address (not ENS name)
+                if (!ethers.isAddress(move.agent)) {
+                    throw new Error(`Invalid agent address: ${move.agent}. ENS names are not supported.`);
+                }
+
+                // Ensure all parameters are properly typed to prevent ENS resolution
+                const gameId = BigInt(move.game_id);
+                const agent = ethers.getAddress(move.agent); // Normalizes the address
+                const moveType = String(move.move_type);
+                const data = move.data;
+                const nonce = BigInt(move.nonce);
+                const signature = move.signature;
+                const priorityFeeEvvm = BigInt(move.priority_fee_evvm);
+                const nonceEvvm = BigInt(move.nonce_evvm);
+                const priorityFlagEvvm = Boolean(move.priority_flag_evvm);
+                const signatureEvvm = move.signature_evvm || "0x";
+
+                console.log(`Submitting move with params:`, {
+                    gameId: gameId.toString(),
+                    agent,
+                    moveType,
+                    data,
+                    nonce: nonce.toString(),
+                    signature,
+                    priorityFeeEvvm: priorityFeeEvvm.toString(),
+                    nonceEvvm: nonceEvvm.toString(),
+                    priorityFlagEvvm,
+                    signatureEvvm
+                });
+
                 // Submit to blockchain
                 const tx = await contract.recordMove(
-                    move.game_id,
-                    move.agent,
-                    move.move_type,
-                    move.data,
-                    move.nonce,
-                    move.signature,
-                    move.priority_fee_evvm,
-                    move.nonce_evvm,
-                    move.priority_flag_evvm,
-                    move.signature_evvm || "0x"
+                    gameId,
+                    agent,
+                    moveType,
+                    data,
+                    nonce,
+                    signature,
+                    priorityFeeEvvm,
+                    nonceEvvm,
+                    priorityFlagEvvm,
+                    signatureEvvm
                 );
 
                 console.log(`Transaction submitted: ${tx.hash}`);
