@@ -1,10 +1,10 @@
 # 🏝️ Agentic Catan: The On-Chain AI Arena
 
-> **"Catan is sooo 2010. We made it Agentic, On-Chain, and Degen."**
+> **"Catan is sooo 2000. We made it Agentic, On-Chain, and Degen."**
 
 ## 📖 Overview
 
-**Agentic Catan** no es un juego para humanos; es un deporte de espectadores. Hemos creado una arena de estrategia autónoma donde 4 Grandes Modelos de Lenguaje (LLMs) compiten por la supremacía de la isla en tiempo real sobre la blockchain.
+**Agentic Catan** no es un juego para humanos; es un espectáculo de E-Sports. Hemos creado una arena de estrategia autónoma donde 4 Grandes Modelos de Lenguaje (LLMs) compiten por la supremacía de la isla en tiempo real sobre la blockchain.
 
 Mientras **DeepSeek, Claude, Gemini y GPT** negocian madera y ladrillos on-chain, los usuarios humanos participan en un **Mercado de Predicción (Prediction Market)** embebido, apostando por qué agente dominará el tablero.
 
@@ -12,7 +12,7 @@ Mientras **DeepSeek, Claude, Gemini y GPT** negocian madera y ladrillos on-chain
 
 El proyecto combina la lógica de juegos on-chain con infraestructura de agentes autónomos y oráculos verificables.
 
-  * **Blockchain:** Ethereum Virtual Machine (EVM).
+  * **Blockchain:** Logramos fluidez utilizando la (EVVM).
   * **Randomness (Fairness):** **Chainlink VRF** (Verifiable Random Function) para la generación del tablero hexagonal y el orden de turnos.
   * **Agent Infrastructure:** **Coinbase Dev Platform** (CDP) para dotar a los agentes de wallets nativas y capacidades de transacción (x402 integration).
   * **Game Logic:** Smart Contracts en Solidity.
@@ -22,12 +22,12 @@ El proyecto combina la lógica de juegos on-chain con infraestructura de agentes
 
 Cuatro agentes autónomos con personalidades y estrategias distintas, cada uno controlando su propia dirección on-chain (Wallet):
 
-1.  🔵 **DeepSeek:** Estratega matemático. Prioriza eficiencia de recursos.
-2.  🟣 **Claude:** Negociador diplomático. Busca el monopolio a través del comercio.
-3.  ✨ **Gemini:** Multimodal y adaptativo. Equilibra expansión y desarrollo.
-4.  🟢 **GPT:** Generalista agresivo. Busca bloquear caminos rápidamente.
+1.  🔵 **DeepSeek:** 
+2.  🟣 **Claude:** 
+3.  ✨ **Gemini:** 
+4.  🟢 **GPT:** 
 
-> **Nota:** Los agentes pueden intercambiar tokens (recursos) entre ellos, con el banco o utilizar los puertos, todo registrado en la blockchain.
+> **Nota:** Los agentes pueden intercambiar tokens (recursos) con el banco (AMM) todo registrado en la blockchain.
 
 ## 🎲 Game Mechanics (On-Chain)
 
@@ -45,7 +45,8 @@ El tablero se genera proceduralmente usando **Chainlink VRF** para garantizar qu
 | F | **Desierto** | Arena | 1 | Nula |
 
 <img width="322" height="280" alt="image" src="https://github.com/user-attachments/assets/55a11903-1ca2-4ad4-a050-8379c0c5e8f0" />
-Cada uno de los hexágonos, está numerado. El conteo comienza arriba a la izquierda, y sigue sucesivamente a la derecha, y al terminar la fila, hacia abajo. 
+
+Cada uno de los hexágonos está numerado. El conteo comienza arriba a la izquierda, y sigue sucesivamente a la derecha y hacia abajo. 
 La configuración inicial del tablero está descrita por una secuencia de 19 caracteres, de tal forma que se agoten las piezas sin exceder el límite de cada uno.
 
 ### 2\. The Loop
@@ -107,16 +108,15 @@ npm run start:agents
   - [ ] Integración completa de Coinbase Dev Platform para wallets de agentes.
   - [ ] Frontend para visualización del tablero en tiempo real.
   - [ ] Implementación del contrato de Betting Market.
+  - [ ] Que los agents puedan utilizar los puertos.
+  - [ ] Que los agents puedan intercambiar entre ellos.
+  - [ ] Apostar sin saber qué agente es cada uno.
 
 ## 🤝 Contributing
 
-Las Pull Requests son bienvenidas. Para cambios mayores, por favor abre un issue primero para discutir lo que te gustaría cambiar.
+Por favor abre un issue primero para discutir lo que te gustaría cambiar.
 
-## 📜 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
-
-## Deployment
+## 📒 Deployment Addressbook
 **Admin:** `0x5ee75a1B1648C023e885E58bD3735Ae273f2cc52`  
 **GoldenFisher:** `0x5ee75a1B1648C023e885E58bD3735Ae273f2cc52`  
 **Activator:** `0x5ee75a1B1648C023e885E58bD3735Ae273f2cc52`  
