@@ -403,6 +403,48 @@ export default function AIBattlePage() {
     }
   }
 
+  // Poll blockchain to check if game finished
+  useEffect(() => {
+    if (!blockchainGameId || gameStatus !== 'active') {
+      return;
+    }
+
+    const checkGameStatus = async () => {
+      try {
+        const res = await fetch(`/api/game/status-onchain?gameId=${blockchainGameId}`);
+        const data = await res.json();
+
+        if (data.isFinished && gameStatus === 'active') {
+          // Game finished on blockchain!
+          console.log('🏆 Game finished on blockchain:', data);
+
+          setGameStatus('finished');
+          setEvents(prev => [...prev, {
+            type: 'victory',
+            winner: {
+              name: `Player ${data.winner}`,
+              victoryPoints: 10,
+              agentName: selectedAgents[data.winner] || `Player ${data.winner}`,
+            },
+            message: `Game finished on blockchain! Winner: Player ${data.winner}`,
+            gameState: { ...gameState, gameId: data.gameId },
+            gameId: data.gameId,
+          }]);
+        }
+      } catch (error) {
+        console.error('Error checking game status:', error);
+      }
+    };
+
+    // Check every 10 seconds
+    const interval = setInterval(checkGameStatus, 10000);
+
+    // Also check immediately
+    checkGameStatus();
+
+    return () => clearInterval(interval);
+  }, [blockchainGameId, gameStatus, selectedAgents, gameState]);
+
   function getStrategyIcon(style: string) {
     switch (style) {
       case 'AGGRESSIVE_EXPANSION': return <Zap className="w-4 h-4" />;
@@ -913,6 +955,7 @@ function CompactEventCard({ event, showDetails }: { event: any; showDetails: boo
   if (event.type === 'victory') {
     const winnerName = event.winner?.name || event.winner?.agentName || 'Ganador';
     const victoryPoints = event.winner?.victoryPoints || 0;
+    const gameId = event.gameState?.gameId || event.gameId;
 
     return (
       <div className="p-4 bg-yellow-50 border-2 border-yellow-400 rounded">
@@ -924,6 +967,11 @@ function CompactEventCard({ event, showDetails }: { event: any; showDetails: boo
           <div className="text-yellow-700 text-sm">
             {victoryPoints} Puntos de Victoria
           </div>
+          {gameId && (
+            <div className="text-yellow-600 text-xs font-mono">
+              Juego #{gameId}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1008,6 +1056,7 @@ function EventCard({ event }: { event: any }) {
   if (event.type === 'victory') {
     const winnerName = event.winner?.name || event.winner?.agentName || 'Winner';
     const victoryPoints = event.winner?.victoryPoints || 0;
+    const gameId = event.gameState?.gameId || event.gameId;
 
     return (
       <Card className="bg-yellow-50 border-yellow-400 border-2">
@@ -1020,6 +1069,11 @@ function EventCard({ event }: { event: any }) {
             <div className="text-yellow-700">
               {victoryPoints} Victory Points
             </div>
+            {gameId && (
+              <div className="text-yellow-600 text-sm font-mono">
+                Game #{gameId}
+              </div>
+            )}
             <div className="text-sm text-yellow-600 italic mt-2">
               &quot;{event.message}&quot;
             </div>

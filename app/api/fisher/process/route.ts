@@ -140,9 +140,10 @@ export async function POST(request: Request) {
                 const priorityFlagEvvm = Boolean(move.priority_flag_evvm);
                 const signatureEvvm = move.signature_evvm || "0x";
 
-                // Calculate the expected message for signature verification
+                // Calculate the expected message for signature verification (with evvmID)
+                const evvmID = process.env.EVVM_ID || '0';
                 const dataHash = ethers.keccak256(data);
-                const expectedMessage = `${move.game_id},${moveType},${dataHash},${move.nonce}`;
+                const expectedMessage = `${evvmID},recordMove,${move.game_id},${moveType},${dataHash},${move.nonce}`;
                 console.log(`Expected signature message: "${expectedMessage}"`);
                 console.log(`Data hash: ${dataHash}`);
 
