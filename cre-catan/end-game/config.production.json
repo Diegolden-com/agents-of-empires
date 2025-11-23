@@ -1,0 +1,9 @@
+{
+  "schedule": "*/30 * * * * *",
+  "chainSelectorName": "ethereum-testnet-sepolia-base-1",
+  "consumerAddress": "0x9Be8945938D2521A23670687F1ee830b8c2Ee415",
+  "forwarderAddress": "0x82300bd7c3958625581cc2f77bc6464dcecdf3e5",
+  "gasLimit": "2100000",
+  "gameId": "2",
+  "winner": 2
+}
