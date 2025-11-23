@@ -8,6 +8,7 @@ import { AgentConfig, LLMConfig } from './agent-configs';
 import { GameState, ResourceType } from './types';
 import { rankVertices, rankEdges, formatVertexOptions, formatEdgeOptions } from './position-ranker';
 import { saveOptionMap } from './option-mapper';
+import { BoardUtils } from './board-utils';
 
 // ✨ Función para obtener el modelo de IA según la configuración
 function getModelFromConfig(config: LLMConfig) {
@@ -265,27 +266,25 @@ export async function getAgentDecision(
 
   // Calcular oponente líder
   const opponents = gameState.players.filter(p => p.id !== playerId);
-  const leader = opponents.reduce((prev, current) => 
+  const leader = opponents.reduce((prev, current) =>
     current.victoryPoints > prev.victoryPoints ? current : prev
-  , opponents[0]);
+    , opponents[0]);
 
   // Encontrar vértices válidos según reglas de Catán (distancia)
   const availableVerticesRaw = gameState.board.vertices
     .filter(v => {
       if (v.building) return false;
-      
+
       // Check distance rule: no settlements within 1 edge distance
-      const adjacentVertexIds = gameState.board.edges
-        .filter(e => e.vertexIds.includes(v.id))
-        .flatMap(e => e.vertexIds)
-        .filter(id => id !== v.id);
-      
+      // Use BoardUtils for O(1) adjacency lookup (matches contract logic)
+      const adjacentVertexIds = BoardUtils.getAdjacentVertices(v.id);
+
       // Verify no adjacent vertex has a building
       const hasAdjacentBuilding = adjacentVertexIds.some(id => {
         const adjacentVertex = gameState.board.vertices.find(vertex => vertex.id === id);
         return adjacentVertex?.building !== undefined;
       });
-      
+
       return !hasAdjacentBuilding;
     });
 
@@ -297,15 +296,15 @@ export async function getAgentDecision(
 
   // Para edges, filtrar según la fase
   let availableEdgesRaw = gameState.board.edges.filter(e => !e.road);
-  
+
   // Si es fase de setup de caminos, solo mostrar edges conectados al último asentamiento
   if (gameState.phase === 'setup_road_1' || gameState.phase === 'setup_road_2') {
     // Use lastSettlementId if available (reliable)
     let settlementId = gameState.lastSettlementId;
-    
+
     // Fallback logic if not set (shouldn't happen with new engine)
     if (settlementId === undefined) {
-       const playerVertices = gameState.board.vertices.filter(v => 
+      const playerVertices = gameState.board.vertices.filter(v =>
         v.building && v.building.playerId === playerId
       );
       if (playerVertices.length > 0) {
@@ -315,7 +314,7 @@ export async function getAgentDecision(
 
     if (settlementId !== undefined) {
       // Solo edges que conectan al último asentamiento
-      availableEdgesRaw = availableEdgesRaw.filter(e => 
+      availableEdgesRaw = availableEdgesRaw.filter(e =>
         e.vertexIds.includes(settlementId!)
       );
       console.log(`🔍 Setup road phase: Found ${availableEdgesRaw.length} edges connected to last settlement ${settlementId}`);
@@ -327,27 +326,27 @@ export async function getAgentDecision(
       const [v1Id, v2Id] = e.vertexIds;
       const v1 = gameState.board.vertices.find(v => v.id === v1Id);
       const v2 = gameState.board.vertices.find(v => v.id === v2Id);
-      
+
       // Connected to player's building?
       if (v1?.building?.playerId === playerId || v2?.building?.playerId === playerId) {
         return true;
       }
-      
+
       // Connected to player's road?
-      const adjacentEdges = gameState.board.edges.filter(adj => 
-        adj.id !== e.id && 
+      const adjacentEdges = gameState.board.edges.filter(adj =>
+        adj.id !== e.id &&
         (adj.vertexIds.includes(v1Id) || adj.vertexIds.includes(v2Id))
       );
       return adjacentEdges.some(adj => adj.road?.playerId === playerId);
     });
-    
+
     availableEdgesRaw = connectedEdges.length > 0 ? connectedEdges : availableEdgesRaw;
   }
 
   // CRITICAL: Validate ALL edges before ranking them
   // With numeric IDs and adjacentVertexIds, all edges are guaranteed valid by construction
   console.log(`\n🔍 Found ${availableEdgesRaw.length} available edges for ${player.name}`);
-  
+
   // Rankear y obtener las mejores 5 opciones
   const rankedEdges = rankEdges(availableEdgesRaw, gameState, playerId, 5);
   const edgeOptionsText = formatEdgeOptions(rankedEdges);
@@ -404,9 +403,9 @@ ${rankedEdges.length > 0 ? `
 ✅ Road Options (choose 1-${rankedEdges.length}):
 ${edgeOptionsText}
 
-${gameState.phase === 'setup_road_1' || gameState.phase === 'setup_road_2' ? 
-  '⚠️ SETUP PHASE: All roads connect to your LAST settlement (as required)' : 
-  'All roads connect to your existing network'}
+${gameState.phase === 'setup_road_1' || gameState.phase === 'setup_road_2' ?
+        '⚠️ SETUP PHASE: All roads connect to your LAST settlement (as required)' :
+        'All roads connect to your existing network'}
 ` : '❌ No road options available'}
 
 🚨 NEW SIMPLIFIED SYSTEM - JUST PICK A NUMBER!
@@ -561,9 +560,9 @@ Respond with valid JSON only.`;
     const model = getModelFromConfig(agentConfig.llmConfig);
     const temperature = agentConfig.llmConfig.temperature ?? 0.7;
     const maxTokens = agentConfig.llmConfig.maxTokens ?? 300;
-    
+
     console.log(`[${agentConfig.name}] Using ${agentConfig.llmConfig.provider}/${agentConfig.llmConfig.model} (temp: ${temperature})`);
-    
+
     const result = await generateText({
       model: model as any,
       system: getSystemPrompt(agentConfig),
@@ -575,7 +574,7 @@ Respond with valid JSON only.`;
     const fullText = result.text;
 
     console.log(`[${agentConfig.name}] Raw response:`, fullText.substring(0, 300));
-    
+
     // Log if we see wrong action names
     if (fullText.includes('"action": "setup_')) {
       console.error(`[${agentConfig.name}] ERROR: Used wrong action name "setup_..." - should use "build_road" or "build_settlement"`);
@@ -583,7 +582,7 @@ Respond with valid JSON only.`;
 
     // Extract JSON from response - try multiple patterns
     let jsonMatch = fullText.match(/\{[\s\S]*\}/);
-    
+
     if (!jsonMatch) {
       // Try to find JSON after ```json
       const codeBlockMatch = fullText.match(/```json\s*([\s\S]*?)\s*```/);
@@ -608,7 +607,7 @@ Respond with valid JSON only.`;
     throw new Error('No valid JSON found in response');
   } catch (error) {
     console.error('AI decision error:', error);
-    
+
     // Fallback decision based on phase and strategy
     return getFallbackDecision(agentConfig, gameState, player, rankedVertices, rankedEdges);
   }
@@ -643,10 +642,10 @@ function getFallbackDecision(
         reasoning: 'No vertices available',
       };
     }
-    
+
     // Use option 1 (best option) or random from top 3
     const option = Math.floor(Math.random() * Math.min(3, rankedVertices.length)) + 1;
-    
+
     console.log(`✅ Fallback: Selected option ${option} (out of ${rankedVertices.length} available)`);
     return {
       action: 'build_settlement',
@@ -665,10 +664,10 @@ function getFallbackDecision(
         reasoning: 'No edges available',
       };
     }
-    
+
     // Use option 1 (best option) or random from top 3
     const option = Math.floor(Math.random() * Math.min(3, rankedEdges.length)) + 1;
-    
+
     console.log(`✅ Fallback: Selected option ${option} (out of ${rankedEdges.length} available)`);
     return {
       action: 'build_road',
@@ -679,9 +678,9 @@ function getFallbackDecision(
   }
 
   // Main phase fallback
-  if (agentConfig.strategyStyle === 'AGGRESSIVE_EXPANSION' && 
-      player.resources.wood >= 1 && player.resources.brick >= 1 &&
-      rankedEdges.length > 0) {
+  if (agentConfig.strategyStyle === 'AGGRESSIVE_EXPANSION' &&
+    player.resources.wood >= 1 && player.resources.brick >= 1 &&
+    rankedEdges.length > 0) {
     return {
       action: 'build_road',
       data: 1, // Best option
@@ -707,12 +706,12 @@ function getFallbackDecision(
   // Trade if we have excess
   const resourceCounts = Object.entries(player.resources) as [ResourceType, number][];
   const excess = resourceCounts.find(([, count]) => count >= 4);
-  
+
   if (excess) {
     const [giveResource] = excess;
     const needed = resourceCounts.filter(([type]) => type !== giveResource)
       .sort(([, a], [, b]) => a - b)[0];
-    
+
     if (needed) {
       return {
         action: 'trade_bank',
