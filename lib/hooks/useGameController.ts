@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { createWalletClient, custom, publicActions, parseEther } from 'viem';
+import { createWalletClient, custom, publicActions, parseEther, decodeEventLog } from 'viem';
 import { baseSepolia } from 'viem/chains';
 import { GAME_CONTROLLER_ABI, GAME_CONTROLLER_ADDRESS } from '@/lib/contracts/GameController.abi';
 
@@ -133,20 +133,40 @@ export function useGameController() {
         throw new Error('Transaction reverted. Check contract requirements.');
       }
 
-      // Leer gameCounter para obtener el gameId
-      const gameCounter = await walletClient.readContract({
-        address: GAME_CONTROLLER_ADDRESS as `0x${string}`,
-        abi: GAME_CONTROLLER_ABI,
-        functionName: 'gameCounter',
-      });
+      // Decodificar el evento GameStarted del receipt para obtener el gameId exacto
+      console.log('🔍 Decoding GameStarted event...');
+      let gameId: number | null = null;
+      let requestId: bigint | null = null;
 
-      const gameId = Number(gameCounter);
-      console.log('🎲 Game ID from counter:', gameId);
+      for (const log of receipt.logs) {
+        try {
+          const decodedLog = decodeEventLog({
+            abi: GAME_CONTROLLER_ABI,
+            data: log.data,
+            topics: log.topics,
+          });
+
+          if (decodedLog.eventName === 'GameStarted') {
+            gameId = Number(decodedLog.args.gameId);
+            requestId = decodedLog.args.requestId as bigint;
+            console.log('🎲 Game ID from event:', gameId);
+            console.log('🔗 Request ID from event:', requestId.toString());
+            break;
+          }
+        } catch (err) {
+          // Skip logs that don't match our ABI
+          continue;
+        }
+      }
+
+      if (gameId === null) {
+        throw new Error('Could not find GameStarted event in transaction receipt');
+      }
 
       return {
         gameId,
         txHash: receipt.transactionHash,
-        requestId: null,
+        requestId: requestId ? Number(requestId) : null,
       };
     } catch (err: any) {
       console.error('❌ Error starting game:', err);
