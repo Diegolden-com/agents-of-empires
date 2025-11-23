@@ -1,8 +1,8 @@
 'use client';
 
-import {PrivyProvider} from '@privy-io/react-auth';
+import { PrivyProvider } from '@privy-io/react-auth';
 
-export default function Providers({children, appId}: {children: React.ReactNode, appId: string}) {
+export default function Providers({ children, appId }: { children: React.ReactNode, appId: string }) {
   return (
     <PrivyProvider
       appId={appId}
@@ -52,7 +52,9 @@ export default function Providers({children, appId}: {children: React.ReactNode,
         ],
       }}
     >
-      {children}
+      <CDPProvider>
+        {children}
+      </CDPProvider>
     </PrivyProvider>
   );
 }
