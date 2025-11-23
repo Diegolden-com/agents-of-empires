@@ -8,6 +8,7 @@ import { GameControls } from '@/components/game-controls';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Gamepad2, Sparkles } from 'lucide-react';
+import { Navbar } from '@/components/navbar';
 
 export default function HomePage() {
   const [gameId, setGameId] = useState<string | null>(null);
@@ -83,7 +84,9 @@ export default function HomePage() {
 
   if (!gameState) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-8">
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-8">
         <div className="max-w-4xl mx-auto">
           <div className="text-center space-y-8">
             <div>
@@ -146,13 +149,16 @@ export default function HomePage() {
           </div>
         </div>
       </main>
+      </>
     );
   }
 
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
+    <>
+      <Navbar />
+      <main className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
       <div className="max-w-7xl mx-auto space-y-4">
         {/* Header */}
           <div className="flex items-center justify-between">
@@ -220,6 +226,7 @@ export default function HomePage() {
         )}
       </div>
     </main>
+    </>
   );
 }
 
