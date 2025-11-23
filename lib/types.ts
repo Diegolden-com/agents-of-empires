@@ -19,14 +19,16 @@ export interface HexTile {
 }
 
 export interface Vertex {
-  id: string;
+  id: number; // Simple numeric ID (1-72)
   hexIds: string[]; // Up to 3 adjacent hexes
+  position: { q: number; r: number; s: number }; // Keep for rendering
+  adjacentVertexIds: number[]; // IDs of connected vertices
   building?: Building;
 }
 
 export interface Edge {
-  id: string;
-  vertexIds: [string, string];
+  id: number; // Simple numeric ID
+  vertexIds: [number, number]; // Two vertex IDs
   road?: Road;
 }
 
@@ -65,6 +67,7 @@ export interface GameState {
   turn: number;
   longestRoadPlayerId: string | null;
   largestArmyPlayerId: string | null;
+  lastSettlementId?: number; // Track the last settlement built for setup phase validation
 }
 
 export type GamePhase = 
@@ -101,15 +104,15 @@ export type ActionType =
   | 'discard_resources';
 
 export interface BuildRoadAction {
-  edgeId: string;
+  edgeId: number;
 }
 
 export interface BuildSettlementAction {
-  vertexId: string;
+  vertexId: number;
 }
 
 export interface BuildCityAction {
-  vertexId: string;
+  vertexId: number;
 }
 
 export interface TradeWithBankAction {

@@ -1,0 +1,52 @@
+# ===================================
+# CONFIGURACIÓN MULTI-LLM PARA CATÁN
+# ===================================
+#
+# Copia este archivo como .env.local y agrega tus API keys
+# Solo necesitas configurar los proveedores que quieras usar
+#
+
+# -------------------------------------
+# OpenAI (GPT-4, GPT-4o, GPT-3.5-turbo)
+# -------------------------------------
+# Usado por: El Conquistador, El Apostador
+# Obtén tu key en: https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-...
+
+# -------------------------------------
+# Anthropic (Claude)
+# -------------------------------------
+# Usado por: El Mercader
+# Obtén tu key en: https://console.anthropic.com/
+ANTHROPIC_API_KEY=sk-ant-...
+
+# -------------------------------------
+# Google (Gemini)
+# -------------------------------------
+# Usado por: El Arquitecto
+# Obtén tu key en: https://makersuite.google.com/app/apikey
+GOOGLE_GENERATIVE_AI_API_KEY=...
+
+# -------------------------------------
+# Mistral AI (Opcional)
+# -------------------------------------
+# Obtén tu key en: https://console.mistral.ai/
+MISTRAL_API_KEY=...
+
+# -------------------------------------
+# AI Gateway (Opcional)
+# -------------------------------------
+# Para centralizar todas las llamadas
+# AI_GATEWAY_API_KEY=...
+# AI_GATEWAY_URL=https://your-gateway.com/v1
+
+# -------------------------------------
+# MÍNIMO REQUERIDO
+# -------------------------------------
+# Para que funcione el juego por defecto, necesitas al menos:
+# - OPENAI_API_KEY (para El Conquistador y El Apostador)
+# - ANTHROPIC_API_KEY (para El Mercader)
+# - GOOGLE_GENERATIVE_AI_API_KEY (para El Arquitecto)
+#
+# Si solo quieres probar con OpenAI, modifica lib/agent-configs.ts
+# para que todos los agentes usen el proveedor 'openai'

@@ -1,27 +1,99 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CATAN_AGENTS } from '@/lib/agent-configs';
+import { CATAN_AGENTS, type LLMConfig } from '@/lib/agent-configs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Play, Zap, Brain, Shield, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, Zap, Brain, Shield, Sparkles, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { CatanBoardWithBuildings } from '@/components/catan-board-with-buildings';
 import { ResourceLog } from '@/components/resource-log';
 
+// ✨ Configuraciones de LLM disponibles
+const LLM_OPTIONS: Record<string, { label: string; models: { value: string; label: string; cost: string }[] }> = {
+  openai: {
+    label: 'OpenAI',
+    models: [
+      { value: 'gpt-4o', label: 'GPT-4o (Más capaz)', cost: '💰💰💰' },
+      { value: 'gpt-4o-mini', label: 'GPT-4o Mini (Económico)', cost: '💰' },
+      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', cost: '💰💰💰' },
+      { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (Muy económico)', cost: '💰' },
+    ],
+  },
+  anthropic: {
+    label: 'Anthropic (Claude)',
+    models: [
+      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet (Mejor)', cost: '💰💰💰💰' },
+      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (Rápido)', cost: '💰' },
+    ],
+  },
+  google: {
+    label: 'Google (Gemini)',
+    models: [
+      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', cost: '💰💰💰' },
+      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Muy rápido)', cost: '💰' },
+    ],
+  },
+  mistral: {
+    label: 'Mistral',
+    models: [
+      { value: 'mistral-large-latest', label: 'Mistral Large', cost: '💰💰💰' },
+      { value: 'mistral-small-latest', label: 'Mistral Small', cost: '💰' },
+    ],
+  },
+};
+
 export default function AIBattlePage() {
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+  const [agentLLMConfigs, setAgentLLMConfigs] = useState<Record<string, LLMConfig>>({});
   const [gameStarted, setGameStarted] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
   const [gameState, setGameState] = useState<any>(null);
   const [gameId, setGameId] = useState<string | null>(null);
   const [showEventDetails, setShowEventDetails] = useState(true);
+  const [showLLMConfig, setShowLLMConfig] = useState(false);
 
   function toggleAgent(agentId: string) {
     if (selectedAgents.includes(agentId)) {
       setSelectedAgents(selectedAgents.filter(id => id !== agentId));
+      // Limpiar configuración de LLM
+      const newConfigs = { ...agentLLMConfigs };
+      delete newConfigs[agentId];
+      setAgentLLMConfigs(newConfigs);
     } else if (selectedAgents.length < 4) {
       setSelectedAgents([...selectedAgents, agentId]);
+      // Inicializar con configuración por defecto del agente
+      const agent = CATAN_AGENTS.find(a => a.id === agentId);
+      if (agent) {
+        setAgentLLMConfigs({
+          ...agentLLMConfigs,
+          [agentId]: agent.llmConfig,
+        });
+      }
+    }
+  }
+
+  function updateAgentLLM(agentId: string, provider: string, model: string) {
+    setAgentLLMConfigs({
+      ...agentLLMConfigs,
+      [agentId]: {
+        provider: provider as any,
+        model,
+        temperature: agentLLMConfigs[agentId]?.temperature ?? 0.7,
+        maxTokens: agentLLMConfigs[agentId]?.maxTokens ?? 300,
+      },
+    });
+  }
+
+  function updateAgentTemperature(agentId: string, temperature: number) {
+    if (agentLLMConfigs[agentId]) {
+      setAgentLLMConfigs({
+        ...agentLLMConfigs,
+        [agentId]: {
+          ...agentLLMConfigs[agentId],
+          temperature,
+        },
+      });
     }
   }
 
@@ -33,10 +105,14 @@ export default function AIBattlePage() {
     setGameState(null);
 
     try {
+      // ✨ Enviar configuraciones personalizadas de LLM
       const response = await fetch('/api/game/play-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentIds: selectedAgents }),
+        body: JSON.stringify({ 
+          agentIds: selectedAgents,
+          llmConfigs: agentLLMConfigs, // ✨ Configuraciones personalizadas
+        }),
       });
 
       const reader = response.body?.getReader();
@@ -166,6 +242,76 @@ export default function AIBattlePage() {
                 </CardContent>
               </Card>
 
+              {/* Quick Presets */}
+              {selectedAgents.length >= 2 && (
+                <Card className="bg-gradient-to-r from-purple-50 to-blue-50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">⚡ Quick Presets</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        const configs: Record<string, any> = {};
+                        selectedAgents.forEach(id => {
+                          configs[id] = {
+                            provider: 'openai',
+                            model: 'gpt-4o-mini',
+                            temperature: 0.7,
+                            maxTokens: 300,
+                          };
+                        });
+                        setAgentLLMConfigs(configs);
+                      }}
+                    >
+                      💰 All GPT-4o-mini (Económico)
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        const configs: Record<string, any> = {};
+                        selectedAgents.forEach(id => {
+                          configs[id] = {
+                            provider: 'openai',
+                            model: 'gpt-4o',
+                            temperature: 0.7,
+                            maxTokens: 300,
+                          };
+                        });
+                        setAgentLLMConfigs(configs);
+                      }}
+                    >
+                      🔥 All GPT-4o (Premium)
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        const configs: Record<string, any> = {};
+                        const providers = ['openai', 'anthropic', 'google', 'openai'];
+                        const models = ['gpt-4o', 'claude-3-5-sonnet-20241022', 'gemini-1.5-flash', 'gpt-4o-mini'];
+                        selectedAgents.forEach((id, i) => {
+                          configs[id] = {
+                            provider: providers[i % providers.length],
+                            model: models[i % models.length],
+                            temperature: 0.7,
+                            maxTokens: 300,
+                          };
+                        });
+                        setAgentLLMConfigs(configs);
+                      }}
+                    >
+                      🌈 Mix de Proveedores
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
               <Button
                 onClick={startBattle}
                 disabled={selectedAgents.length < 2}
@@ -177,11 +323,21 @@ export default function AIBattlePage() {
               </Button>
             </div>
 
-            {/* Agent Details */}
+            {/* Agent Details & LLM Configuration */}
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Selected Agents</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Selected Agents</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowLLMConfig(!showLLMConfig)}
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      {showLLMConfig ? 'Hide' : 'Configure'} LLMs
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {selectedAgents.length === 0 ? (
@@ -194,23 +350,111 @@ export default function AIBattlePage() {
                         const agent = CATAN_AGENTS.find(a => a.id === agentId);
                         if (!agent) return null;
 
+                        const llmConfig = agentLLMConfigs[agentId];
+                        const currentProvider = llmConfig?.provider || agent.llmConfig.provider;
+                        const currentModel = llmConfig?.model || agent.llmConfig.model;
+                        const currentTemp = llmConfig?.temperature ?? agent.llmConfig.temperature ?? 0.7;
+
                         return (
-                          <Card key={agent.id}>
-                            <CardHeader>
+                          <Card key={agent.id} className="border-2">
+                            <CardHeader className="pb-3">
                               <CardTitle className="text-base">{agent.name}</CardTitle>
+                              <CardDescription className="text-xs">
+                                {agent.personality}
+                              </CardDescription>
                             </CardHeader>
-                            <CardContent className="text-sm space-y-2">
-                              <div>
-                                <strong>Goals:</strong>
-                                <ul className="list-disc list-inside mt-1 text-muted-foreground">
-                                  {agent.goals.slice(0, 2).map((goal, i) => (
-                                    <li key={i}>{goal}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                              <div>
-                                <strong>Tone:</strong> {agent.toneOfVoice}
-                              </div>
+                            <CardContent className="text-sm space-y-3">
+                              {showLLMConfig ? (
+                                <>
+                                  {/* LLM Provider Selection */}
+                                  <div>
+                                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                                      🤖 LLM Provider
+                                    </label>
+                                    <select
+                                      className="w-full p-2 border rounded text-sm bg-white"
+                                      value={currentProvider}
+                                      onChange={(e) => {
+                                        const provider = e.target.value;
+                                        const firstModel = LLM_OPTIONS[provider].models[0].value;
+                                        updateAgentLLM(agentId, provider, firstModel);
+                                      }}
+                                    >
+                                      {Object.entries(LLM_OPTIONS).map(([key, { label }]) => (
+                                        <option key={key} value={key}>
+                                          {label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  {/* Model Selection */}
+                                  <div>
+                                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                                      🎯 Model
+                                    </label>
+                                    <select
+                                      className="w-full p-2 border rounded text-sm bg-white"
+                                      value={currentModel}
+                                      onChange={(e) => updateAgentLLM(agentId, currentProvider, e.target.value)}
+                                    >
+                                      {LLM_OPTIONS[currentProvider]?.models.map((model) => (
+                                        <option key={model.value} value={model.value}>
+                                          {model.label} {model.cost}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  {/* Temperature Slider */}
+                                  <div>
+                                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                                      🌡️ Temperature: {currentTemp.toFixed(2)}
+                                      <span className="text-xs text-gray-500 ml-2">
+                                        {currentTemp < 0.4 ? '(Muy conservador)' : 
+                                         currentTemp < 0.6 ? '(Conservador)' :
+                                         currentTemp < 0.8 ? '(Balanceado)' :
+                                         currentTemp < 0.9 ? '(Creativo)' : '(Muy arriesgado)'}
+                                      </span>
+                                    </label>
+                                    <input
+                                      type="range"
+                                      min="0.3"
+                                      max="1.0"
+                                      step="0.05"
+                                      value={currentTemp}
+                                      onChange={(e) => updateAgentTemperature(agentId, parseFloat(e.target.value))}
+                                      className="w-full"
+                                    />
+                                  </div>
+
+                                  {/* Current Config Display */}
+                                  <div className="pt-2 border-t">
+                                    <Badge variant="outline" className="text-xs">
+                                      {LLM_OPTIONS[currentProvider]?.label} / {currentModel}
+                                    </Badge>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  {/* Compact View */}
+                                  <div>
+                                    <strong>Strategy:</strong>
+                                    <Badge variant="secondary" className="ml-2 text-xs">
+                                      {agent.strategyStyle.replace(/_/g, ' ')}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <strong>LLM:</strong>
+                                    <Badge variant="outline" className="ml-2 text-xs">
+                                      {LLM_OPTIONS[currentProvider]?.label}
+                                    </Badge>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Model: {currentModel} • Temp: {currentTemp.toFixed(2)}
+                                  </div>
+                                </>
+                              )}
                             </CardContent>
                           </Card>
                         );

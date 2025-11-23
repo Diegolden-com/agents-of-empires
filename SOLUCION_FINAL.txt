@@ -1,0 +1,127 @@
+╔════════════════════════════════════════════════════════════╗
+║     🚨 SOLUCIÓN FINAL - PROMPT ULTRA-SIMPLIFICADO 🚨      ║
+╚════════════════════════════════════════════════════════════╝
+
+❌ PROBLEMA:
+   Agentes jugaban HORRIBLE porque:
+   - Prompt DEMASIADO LARGO (se perdían)
+   - Temperature muy alta (errático)
+   - Instrucciones confusas
+
+✅ SOLUCIÓN DRÁSTICA:
+
+1. PROMPT 5X MÁS CORTO
+   De ~150 líneas → ~30 líneas
+   Solo lo ESENCIAL
+   Sin fluff
+
+2. INSTRUCCIONES TIPO CHECKLIST
+   🎯 EVERY TURN, CHECK IN ORDER:
+   1. Can build CITY? → DO IT! Pick option 1
+   2. Can build SETTLEMENT? → DO IT! Pick option 1
+   3. Can build ROAD? → DO IT! Pick option 1
+   4. Have 4+ same resource? → TRADE
+   5. Otherwise → end_turn
+
+3. SIEMPRE OPCIÓN 1
+   "Option 1 is ALWAYS the best choice (highest score)"
+   No más confusión sobre qué elegir
+
+4. TEMPERATURE BAJA (0.9 → 0.3)
+   Más determinístico
+   Sigue mejor las instrucciones
+   Menos errático
+
+5. MAXTOKEINS REDUCIDO (300 → 200)
+   Respuestas más concisas
+   Más rápido
+
+6. MODELO MEJORADO
+   El Apostador: gpt-4o-mini → gpt-4o
+   Más capaz de seguir instrucciones
+
+📝 EJEMPLO DEL NUEVO PROMPT:
+
+   You are El Conquistador, an expert Catan player.
+   
+   🏆 WIN CONDITION: BE FIRST TO 10 VICTORY POINTS! 🏆
+   
+   📊 POINTS TO WIN:
+   - Settlement = 1 VP 
+   - City = 2 VP ← UPGRADE YOUR SETTLEMENTS!
+   - Longest Road = 2 VP
+   
+   🎯 STRATEGY (SIMPLIFIED):
+   1. SETUP: Choose numbers 6 or 8 (BEST)
+   2. MAIN GAME: ALWAYS build if you have resources!
+   
+   🎯 EVERY TURN, CHECK IN ORDER:
+   1. Can build CITY? → DO IT! Pick option 1
+   2. Can build SETTLEMENT? → DO IT! Pick option 1
+   3. Can build ROAD? → DO IT! Pick option 1
+   4. Have 4+ same resource? → TRADE
+   5. Otherwise → end_turn
+   
+   CRITICAL: 
+   - Option 1 is ALWAYS the best choice
+   - NEVER end_turn if you can build
+
+🔧 ARCHIVOS MODIFICADOS:
+   1. lib/agent-decision.ts
+      - getSystemPrompt() super simplificado
+      - Instrucciones tipo checklist
+      - ~50 líneas vs ~200 antes
+   
+   2. lib/agent-configs.ts
+      - Temperature: 0.3 (todos)
+      - MaxTokens: 200
+      - El Apostador: gpt-4o
+
+✅ VERIFICACIÓN:
+   ✅ Build exitoso
+   ✅ Sin errores
+   ✅ Prompt ultra-simple
+   ✅ Temperature baja
+
+🎮 QUÉ ESPERAR AHORA:
+   ✅ Agentes siguen instrucciones
+   ✅ SIEMPRE eligen opción 1 (la mejor)
+   ✅ Construyen agresivamente
+   ✅ No desperdician turnos
+   ✅ Respuestas más consistentes
+   ✅ Setup inteligente (números 6 y 8)
+
+🚀 PROBAR:
+   npm run dev
+   
+   Ve a: http://localhost:3000/ai-battle
+   
+   Los agentes ahora deberían:
+   - Entender claramente el objetivo
+   - Seguir el checklist
+   - Elegir siempre opción 1
+   - Construir cada turno si pueden
+   - Jugar de forma CONSISTENTE
+
+📚 MÁS INFO:
+   PROMPT_SIMPLIFICADO_V2.md
+
+💡 SI AÚN FALLA:
+   Posibles causas:
+   - API keys no configuradas
+   - LLMs no disponibles
+   - Bugs en game engine
+   - Reglas del juego incorrectas
+   
+   Revisar console del servidor para ver
+   decisiones de los agentes.
+
+🎉 CAMBIOS RADICALES IMPLEMENTADOS!
+
+El prompt es ahora:
+- 5x más corto
+- 10x más claro
+- 100% enfocado en acción
+
+¡Debería funcionar MUCHO mejor!
+

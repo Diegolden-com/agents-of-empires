@@ -1,5 +1,14 @@
 // Configuraciones de agentes LLM para Catán
 
+export type LLMProvider = 'openai' | 'anthropic' | 'google' | 'mistral';
+
+export interface LLMConfig {
+  provider: LLMProvider;
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -11,6 +20,7 @@ export interface AgentConfig {
   interactionRules: string[];
   toneOfVoice: string;
   preferredResources: string[];
+  llmConfig: LLMConfig; // ✨ Configuración del LLM para este agente
 }
 
 export const CATAN_AGENTS: AgentConfig[] = [
@@ -43,6 +53,12 @@ export const CATAN_AGENTS: AgentConfig[] = [
     ],
     toneOfVoice: 'Confiado, dominante, competitivo',
     preferredResources: ['wood', 'brick'],
+    llmConfig: {
+      provider: 'openai',
+      model: 'gpt-4o',
+      temperature: 0.3, // Más determinístico para seguir instrucciones
+      maxTokens: 200,
+    },
   },
   {
     id: 'merchant',
@@ -73,6 +89,12 @@ export const CATAN_AGENTS: AgentConfig[] = [
     ],
     toneOfVoice: 'Analítico, prudente, estratégico',
     preferredResources: ['wheat', 'ore'],
+    llmConfig: {
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      temperature: 0.3, // Más determinístico
+      maxTokens: 200,
+    },
   },
   {
     id: 'architect',
@@ -103,6 +125,12 @@ export const CATAN_AGENTS: AgentConfig[] = [
     ],
     toneOfVoice: 'Reflexivo, cauteloso, profesional',
     preferredResources: ['wheat', 'ore', 'brick'],
+    llmConfig: {
+      provider: 'google',
+      model: 'gemini-1.5-flash',
+      temperature: 0.3, // Más determinístico
+      maxTokens: 200,
+    },
   },
   {
     id: 'gambler',
@@ -133,6 +161,12 @@ export const CATAN_AGENTS: AgentConfig[] = [
     ],
     toneOfVoice: 'Despreocupado, bromista, impredecible',
     preferredResources: ['cualquiera'],
+    llmConfig: {
+      provider: 'openai',
+      model: 'gpt-4o', // Upgrade a modelo más capaz
+      temperature: 0.3, // Más determinístico
+      maxTokens: 200,
+    },
   },
 ];
 
