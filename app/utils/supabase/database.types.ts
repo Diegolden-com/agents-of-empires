@@ -68,6 +68,57 @@ export type Database = {
         }
         Relationships: []
       }
+      games: {
+        Row: {
+          agents: Json
+          bettor_address: string | null
+          bettor_choice: number | null
+          created_at: string | null
+          finished_at: string | null
+          game_id: number
+          id: string
+          started_at: string | null
+          status: string
+          total_moves: number | null
+          total_turns: number | null
+          updated_at: string | null
+          winner_agent: string | null
+          winner_index: number | null
+        }
+        Insert: {
+          agents: Json
+          bettor_address?: string | null
+          bettor_choice?: number | null
+          created_at?: string | null
+          finished_at?: string | null
+          game_id: number
+          id?: string
+          started_at?: string | null
+          status?: string
+          total_moves?: number | null
+          total_turns?: number | null
+          updated_at?: string | null
+          winner_agent?: string | null
+          winner_index?: number | null
+        }
+        Update: {
+          agents?: Json
+          bettor_address?: string | null
+          bettor_choice?: number | null
+          created_at?: string | null
+          finished_at?: string | null
+          game_id?: number
+          id?: string
+          started_at?: string | null
+          status?: string
+          total_moves?: number | null
+          total_turns?: number | null
+          updated_at?: string | null
+          winner_agent?: string | null
+          winner_index?: number | null
+        }
+        Relationships: []
+      }
       signed_transactions: {
         Row: {
           created_at: string | null
