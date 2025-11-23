@@ -27,14 +27,37 @@ export async function POST(request: Request) {
         );
 
         // Initialize blockchain provider and wallet
-        const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+        // Disable ENS resolution by not providing network info that includes ENS
+        const provider = new ethers.JsonRpcProvider(
+            process.env.RPC_URL,
+            {
+                chainId: 84532,
+                name: 'base-sepolia',
+                //ensAddress: null // Explicitly disable ENS
+            },
+            { staticNetwork: true } // Prevent network detection
+        );
+
+        console.log("Provider initialized for chain:", await provider.getNetwork());
+
         const wallet = new ethers.Wallet(process.env.FISHER_PRIVATE_KEY!, provider);
+        console.log("Wallet address:", wallet.address);
+
+        // Validate contract address before creating contract instance
+        const contractAddress = process.env.GAME_MOVE_SERVICE_ADDRESS!;
+        if (!ethers.isAddress(contractAddress)) {
+            throw new Error(`Invalid contract address: ${contractAddress}. Must be a valid Ethereum address.`);
+        }
+
+        // Normalize the contract address to checksum format
+        const normalizedContractAddress = ethers.getAddress(contractAddress);
 
         const contract = new ethers.Contract(
-            process.env.GAME_MOVE_SERVICE_ADDRESS!,
+            normalizedContractAddress,
             ABI,
             wallet
         );
+        console.log("Contract initialized at:", normalizedContractAddress);
 
         console.log("Checking for pending moves...", gameId ? `for game ${gameId}` : 'across all games');
 
@@ -121,8 +144,9 @@ export async function POST(request: Request) {
                     signatureEvvm
                 });
 
-                // Submit to blockchain
-                const tx = await contract.recordMove(
+                // Submit to blockchain using getFunction to avoid ENS resolution
+                const recordMoveFunction = contract.getFunction("recordMove");
+                const tx = await recordMoveFunction(
                     gameId,
                     agent,
                     moveType,
