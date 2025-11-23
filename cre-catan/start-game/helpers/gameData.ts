@@ -212,30 +212,32 @@ export const readGameFromBlockchain = async (
   }
 };
 
-const httpRequest = async (sendRequester: HTTPSendRequester, gamePayload: GamePayload, apiUrl: string) => {
-  const bodyBytes = new TextEncoder().encode(JSON.stringify(gamePayload));
-  const body = Buffer.from(bodyBytes).toString('base64');
+export const httpRequest = (gamePayload: GamePayload, apiUrl: string) => {
+  return (sendRequester: HTTPSendRequester, config: Config) => {
+    const bodyBytes = new TextEncoder().encode(JSON.stringify(gamePayload));
+    const body = Buffer.from(bodyBytes).toString('base64');
 
-  const req = {
-    url: apiUrl,
-    method: 'POST' as const,
-    body: body,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    cacheSettings: {
-      readFromCache: true,
-      maxAgeMs: 60000,
+    const req = {
+      url: apiUrl,
+      method: 'POST' as const,
+      body: body,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      cacheSettings: {
+        readFromCache: true,
+        maxAgeMs: 60000,
+      }
+    };
+
+    const response = sendRequester.sendRequest(req).result();
+
+    if(!ok(response)) {
+      throw new Error(`Failed to send request: ${response.statusCode}`);
     }
+
+    return { statusCode: response.statusCode };
   };
-
-  const response = sendRequester.sendRequest(req).result();
-
-  if(!ok(response)) {
-    throw new Error(`Failed to send request: ${response}`);
-  }
-
-  return { statusCode: response.statusCode };
 };
 
 const logGameData = (runtime: Runtime<Config>, gamePayload: GamePayload) => {

@@ -1,7 +1,3 @@
-import { openai } from '@ai-sdk/openai';
-import { anthropic } from '@ai-sdk/anthropic';
-import { google } from '@ai-sdk/google';
-import { mistral } from '@ai-sdk/mistral';
 import { generateText } from 'ai';
 import { z } from 'zod';
 import { AgentConfig, LLMConfig } from './agent-configs';
@@ -10,21 +6,21 @@ import { rankVertices, rankEdges, formatVertexOptions, formatEdgeOptions } from 
 import { saveOptionMap } from './option-mapper';
 import { BoardUtils } from './board-utils';
 
+// ✨ Vercel AI SDK con AI Gateway
+// El SDK automáticamente detecta AI_GATEWAY_API_KEY del .env
+// No es necesario crear un cliente custom
+
+if (!process.env.AI_GATEWAY_API_KEY && !process.env.OPENAI_API_KEY) {
+  console.error('⚠️ No AI_GATEWAY_API_KEY or OPENAI_API_KEY found in environment');
+  console.error('⚠️ AI models will not work. Please check your .env file');
+} else {
+  console.log(`✅ AI Gateway/SDK configured`);
+}
+
 // ✨ Función para obtener el modelo de IA según la configuración
-function getModelFromConfig(config: LLMConfig) {
-  switch (config.provider) {
-    case 'openai':
-      return openai(config.model);
-    case 'anthropic':
-      return anthropic(config.model);
-    case 'google':
-      return google(config.model);
-    case 'mistral':
-      return mistral(config.model);
-    default:
-      console.warn(`Unknown provider: ${config.provider}, falling back to OpenAI`);
-      return openai('gpt-4o-mini');
-  }
+// Retorna el string en formato 'provider/model' que el SDK entiende automáticamente
+function getModelFromConfig(config: LLMConfig): string {
+  return `${config.provider}/${config.model}`;
 }
 
 export const agentDecisionSchema = z.object({

@@ -5,9 +5,10 @@ import {
   type EVMLog,
   bytesToHex,
   getNetwork,
+  consensusIdenticalAggregation,
 } from "@chainlink/cre-sdk";
 import { decodeEventLog, parseAbi } from "viem";
-import { readGameFromBlockchain } from "./helpers/gameData";
+import { readGameFromBlockchain, httpRequest } from "./helpers/gameData";
 
 type Config = {
   schedule: string;
@@ -22,7 +23,10 @@ type PostResponse = {
 // Define all events from GameController.sol
 const eventAbi = parseAbi(["event GameActivated(uint256 indexed gameId)"]);
 
-const onLogTrigger = async (runtime: Runtime<Config>, log: EVMLog): Promise<string> => {
+const onLogTrigger = async (
+  runtime: Runtime<Config>,
+  log: EVMLog
+): Promise<string> => {
   runtime.log(`Log detected from ${log.address}`);
 
   try {
@@ -49,26 +53,19 @@ const onLogTrigger = async (runtime: Runtime<Config>, log: EVMLog): Promise<stri
 
       const gamePayload = await readGameFromBlockchain(runtime, gameId);
 
-      // TODO: Send gamePayload to NextJS API
-      // Example implementation:
-      // try {
-      //   const response = await fetch('https://your-nextjs-app.com/api/game/start', {
-      //     method: 'POST',
-      //     headers: { 'Content-Type': 'application/json' },
-      //     body: JSON.stringify(gamePayload)
-      //   });
-      //
-      //   if (!response.ok) {
-      //     runtime.log(`API Error: ${response.status} ${response.statusText}`);
-      //   } else {
-      //     const result = await response.json();
-      //     runtime.log(`API Response: ${JSON.stringify(result)}`);
-      //   }
-      // } catch (error) {
-      //   runtime.log(`Error calling API: ${error}`);
-      // }
+      const httpClient = new cre.capabilities.HTTPClient();
+      
+      const apiUrl = "http://localhost:3000/api/game/start"; // Replace with your actual API URL
+      
+      const result = httpClient
+        .sendRequest(
+          runtime,
+          httpRequest(gamePayload, apiUrl),
+          consensusIdenticalAggregation<PostResponse>()
+        )(runtime.config)
+        .result();
 
-      runtime.log(`✓ Game ${gamePayload.gameId} data ready for API`);
+      runtime.log(`✓ Game ${gamePayload.gameId} data sent to API with status: ${result.statusCode}`);
       return `Game ${gameId.toString()} activated successfully`;
     }
   } catch (error) {

@@ -5,6 +5,7 @@ import { getAgentById } from '@/lib/agent-configs';
 import { getAgentDecision, AgentDecision } from '@/lib/agent-decision';
 import { getGameStateForAgent, executeAgentAction } from '@/lib/agent-interface';
 import { GameState } from '@/lib/types';
+import { getGameActionIntegrator } from '@/services/gameActionIntegrator.service';
 
 export const maxDuration = 300; // 5 minutes for long games
 
@@ -56,7 +57,7 @@ function serializeGameState(state: GameState) {
 
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
-
+  
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: any) => {
@@ -66,7 +67,18 @@ export async function POST(req: NextRequest) {
       try {
         // Read agent selections from request body
         const body = await req.json();
-        const { agentIds, llmConfigs } = body as { agentIds: string[]; llmConfigs?: Record<string, any> };
+        const { gameId: blockchainGameId, agentIds, llmConfigs } = body as {
+          gameId?: number;
+          agentIds: string[];
+          llmConfigs?: Record<string, any>;
+        };
+
+        // Validate blockchain gameId
+        if (!blockchainGameId || typeof blockchainGameId !== 'number') {
+          send({ type: 'error', message: 'Blockchain gameId (number) is required' });
+          controller.close();
+          return;
+        }
 
         if (!agentIds || agentIds.length < 2 || agentIds.length > 4) {
           send({ type: 'error', message: 'Need 2-4 agent IDs' });
@@ -78,7 +90,7 @@ export async function POST(req: NextRequest) {
         const agentConfigs = agentIds.map(id => {
           const agent = getAgentById(id);
           if (!agent) return null;
-
+          
           // ✨ Override LLM config if provided
           if (llmConfigs && llmConfigs[id]) {
             return {
@@ -88,7 +100,7 @@ export async function POST(req: NextRequest) {
           }
           return agent;
         }).filter(Boolean);
-
+        
         if (agentConfigs.length !== agentIds.length) {
           send({ type: 'error', message: 'Invalid agent IDs' });
           controller.close();
@@ -96,11 +108,24 @@ export async function POST(req: NextRequest) {
         }
 
         console.log('🎲 Catan AI Game starting:', agentConfigs.map(a => a!.name).join(' vs '));
+        console.log(`🔗 Blockchain Game ID: ${blockchainGameId}`);
 
         // ✨ Log LLM configurations
         agentConfigs.forEach(agent => {
           console.log(`  - ${agent!.name}: ${agent!.llmConfig.provider}/${agent!.llmConfig.model} (temp: ${agent!.llmConfig.temperature})`);
         });
+
+        // ✨ Initialize game integrator for blockchain signing and DB storage
+        const integrator = getGameActionIntegrator();
+
+        // Initialize game in Supabase
+        try {
+          await integrator.initializeGame(blockchainGameId, agentIds);
+          console.log(`✅ Game ${blockchainGameId} initialized in Supabase`);
+        } catch (dbError) {
+          console.error('⚠️ Error initializing game in Supabase:', dbError);
+          // Continue game even if DB initialization fails
+        }
 
         // Create game
         const playerNames = agentConfigs.map(a => a!.name);
@@ -109,8 +134,8 @@ export async function POST(req: NextRequest) {
 
         console.log(`🎮 Game created with ID: ${gameId}`);
 
-        send({
-          type: 'game_start',
+        send({ 
+          type: 'game_start', 
           gameId,
           players: gameState.players.map((p, i) => ({
             ...p,
@@ -125,9 +150,9 @@ export async function POST(req: NextRequest) {
         gameState.players.forEach((player, i) => {
           const agent = agentConfigs[i]!;
           const greeting = getGreeting(agent);
-          send({
-            type: 'greeting',
-            playerId: player.id,
+          send({ 
+            type: 'greeting', 
+            playerId: player.id, 
             playerName: player.name,
             message: greeting,
           });
@@ -143,6 +168,21 @@ export async function POST(req: NextRequest) {
 
         // Game loop
         while (turnCount < maxTurns) {
+          // Si alguien ya finalizó el juego manualmente en la BDD, salimos
+          try {
+            const dbGame = await integrator.getGame(blockchainGameId);
+            if (dbGame?.status === 'finished') {
+              send({
+                type: 'victory',
+                message: 'Juego marcado como finalizado externamente.',
+                gameState: serializeGameState(gameState),
+              });
+              break;
+            }
+          } catch (statusError) {
+            console.error('Error checking game status:', statusError);
+          }
+
           // Check if someone won
           const hasWinner = gameState.players.some(p => p.victoryPoints >= 10);
           if (hasWinner) break;
@@ -153,9 +193,9 @@ export async function POST(req: NextRequest) {
           if (!currentAgentConfig) break;
 
           console.log(`\n🎯 Turn ${gameState.turn} | Phase: ${gameState.phase} | Player: ${currentPlayer.name}`);
-
-          send({
-            type: 'turn_start',
+          
+          send({ 
+            type: 'turn_start', 
             turn: gameState.turn,
             phase: gameState.phase,
             currentPlayer: {
@@ -183,12 +223,12 @@ export async function POST(req: NextRequest) {
           } catch (error) {
             console.error(`❌ Decision error for ${currentPlayer.name}:`, error);
             consecutiveFailures++;
-            send({
-              type: 'error',
+            send({ 
+              type: 'error', 
               message: `Error getting decision from ${currentPlayer.name}: ${error}`,
               playerId: currentPlayer.id,
             });
-
+            
             // If too many decision errors, skip to next player instead of breaking
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
               console.error(`❌ Too many decision errors, skipping player ${currentPlayer.name}`);
@@ -211,8 +251,8 @@ export async function POST(req: NextRequest) {
             data: decision.data,
           });
 
-          conversationHistory.push({
-            from: currentPlayer.name,
+          conversationHistory.push({ 
+            from: currentPlayer.name, 
             text: decision.message,
           });
 
@@ -228,11 +268,11 @@ export async function POST(req: NextRequest) {
           if (!result.success) {
             consecutiveFailures++;
             console.warn(`⚠️ Action failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}): ${result.message}`);
-
+            
             // After max failures, force end turn or skip to next phase
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
               console.error(`❌ Max failures reached, forcing phase progression`);
-
+              
               // Force phase progression or end turn
               if (gameState.phase === 'setup_settlement_1') {
                 gameState.phase = 'setup_road_1';
@@ -250,9 +290,9 @@ export async function POST(req: NextRequest) {
                 gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
                 gameState.turn++;
               }
-
+              
               consecutiveFailures = 0;
-
+              
               send({
                 type: 'action_result',
                 playerId: currentPlayer.id,
@@ -261,11 +301,28 @@ export async function POST(req: NextRequest) {
                 message: '⏭️ Too many failures, skipping to next phase/player',
                 gameState: serializeGameState(gameState),
               });
-
+              
               continue; // Skip to next iteration
             }
           } else {
             consecutiveFailures = 0; // Reset on success
+
+            // ✨ Save action to Supabase (sign and store)
+            try {
+              await integrator.processAndSaveAction(
+                blockchainGameId,
+                agentIds[gameState.currentPlayerIndex],
+                {
+                  type: decision.action,
+                  data: decision.data
+                },
+                currentPlayer.id // Pass playerId for option mapping (player_0, player_1, etc.)
+              );
+              console.log(`✅ Action saved to database for ${agentIds[gameState.currentPlayerIndex]}`);
+            } catch (dbError) {
+              console.error('⚠️ Error saving action to database:', dbError);
+              // Continue game even if DB save fails
+            }
           }
 
           // Update game store after action
@@ -284,6 +341,21 @@ export async function POST(req: NextRequest) {
           const winner = gameState.players.find(p => p.victoryPoints >= 10);
           if (winner) {
             const winnerAgent = agentConfigs[gameState.players.indexOf(winner)];
+            const winnerIndex = gameState.players.indexOf(winner);
+
+            // ✨ Save game result to Supabase
+            try {
+              await integrator.finishGame(
+                blockchainGameId,
+                agentIds[winnerIndex],
+                winnerIndex,
+                gameState.turn
+              );
+              console.log(`🏆 Game ${blockchainGameId} finished in database. Winner: ${agentIds[winnerIndex]}`);
+            } catch (dbError) {
+              console.error('⚠️ Error finishing game in database:', dbError);
+            }
+
             send({
               type: 'victory',
               winner: {
@@ -307,6 +379,20 @@ export async function POST(req: NextRequest) {
         if (realWinner) {
           // Someone actually won with 10 VP
           const winnerAgent = agentConfigs[gameState.players.indexOf(realWinner)];
+          const winnerIndex = gameState.players.indexOf(realWinner);
+
+          // ✨ Save game result
+          try {
+            await integrator.finishGame(
+              blockchainGameId,
+              agentIds[winnerIndex],
+              winnerIndex,
+              gameState.turn
+            );
+          } catch (dbError) {
+            console.error('⚠️ Error finishing game:', dbError);
+          }
+
           send({
             type: 'victory',
             winner: {
@@ -327,6 +413,20 @@ export async function POST(req: NextRequest) {
           if (leader.victoryPoints >= 5) {
             // Only declare winner if they have at least 5 VP (reasonable progress)
             const winnerAgent = agentConfigs[gameState.players.indexOf(leader)];
+            const winnerIndex = gameState.players.indexOf(leader);
+
+            // ✨ Save game result
+            try {
+              await integrator.finishGame(
+                blockchainGameId,
+                agentIds[winnerIndex],
+                winnerIndex,
+                gameState.turn
+              );
+            } catch (dbError) {
+              console.error('⚠️ Error finishing game:', dbError);
+            }
+
             send({
               type: 'victory',
               winner: {
@@ -339,10 +439,34 @@ export async function POST(req: NextRequest) {
               gameState: serializeGameState(gameState),
             });
           } else {
-            // Game ended prematurely with no real progress
+            // Game ended with insufficient progress: pick random winner to unblock flow
+            const topScore = leader.victoryPoints;
+            const topPlayers = gameState.players.filter(p => p.victoryPoints === topScore);
+            const randomWinner = topPlayers[Math.floor(Math.random() * topPlayers.length)];
+            const winnerIndex = gameState.players.indexOf(randomWinner);
+            const winnerAgent = agentConfigs[winnerIndex];
+
+            try {
+              await integrator.finishGame(
+                blockchainGameId,
+                agentIds[winnerIndex],
+                winnerIndex,
+                gameState.turn
+              );
+            } catch (dbError) {
+              console.error('⚠️ Error finishing game (random winner):', dbError);
+            }
+
             send({
-              type: 'error',
-              message: `Game ended after ${turnCount} turns with insufficient progress. Leader has only ${leader.victoryPoints} VP. The game may have encountered errors during setup.`,
+              type: 'victory',
+              winner: {
+                id: randomWinner.id,
+                name: randomWinner.name,
+                victoryPoints: randomWinner.victoryPoints,
+                agentName: winnerAgent?.name,
+              },
+              message: `Game ended after ${turnCount} turns without clear progress. Random winner: ${randomWinner.name}.`,
+              gameState: serializeGameState(gameState),
             });
           }
         } else {
@@ -356,8 +480,8 @@ export async function POST(req: NextRequest) {
         controller.close();
       } catch (error) {
         console.error('Game error:', error);
-        send({
-          type: 'error',
+        send({ 
+          type: 'error', 
           message: error instanceof Error ? error.message : 'Unknown error',
         });
         controller.close();
@@ -376,23 +500,22 @@ export async function POST(req: NextRequest) {
 
 function getGreeting(agent: any): string {
   const greetings: Record<string, string> = {
-    conquistador: 'I will conquer this island! No territory will be out of my reach.',
-    merchant: 'May the best deals bring us victory. Prosperity for all.',
-    architect: 'I will build an empire that will endure. Patience is key.',
-    gambler: 'Let the dice roll! Fortune favors the bold.',
+    conquistador: '¡Conquistaré esta isla! Ningún territorio estará fuera de mi alcance.',
+    merchant: 'Que los mejores tratos nos traigan la victoria. Prosperidad para todos.',
+    architect: 'Construiré un imperio que perdurará. La paciencia es clave.',
+    gambler: '¡Que rueden los dados! La fortuna favorece a los audaces.',
   };
-
-  return greetings[agent.id] || 'Let the game begin!';
+  
+  return greetings[agent.id] || '¡Que comience el juego!';
 }
 
 function getVictoryMessage(agent: any): string {
   const victories: Record<string, string> = {
-    conquistador: 'VICTORY! My empire extends across the entire island. No one could stop my expansion!',
-    merchant: 'Strategy and smart trading prevail. A well-deserved victory.',
-    architect: 'My empire built with patience and vision has triumphed. Planning always wins.',
-    gambler: 'HA! Did you see that? Calculated risks pay off! Epic victory!',
+    conquistador: '¡VICTORIA! Mi imperio se extiende por toda la isla. ¡Nadie pudo detener mi expansión!',
+    merchant: 'La estrategia y el comercio inteligente prevalecen. Una victoria bien merecida.',
+    architect: 'Mi imperio construido con paciencia y visión ha triunfado. La planificación siempre gana.',
+    gambler: '¡JA! ¿Vieron eso? ¡Los riesgos calculados dan sus frutos! ¡Victoria épica!',
   };
-
-  return victories[agent.id] || 'Victory!';
+  
+  return victories[agent.id] || '¡Victoria!';
 }
-

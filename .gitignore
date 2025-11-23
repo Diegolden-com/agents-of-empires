@@ -57,3 +57,6 @@ blockchain/out
 
 # Submission metadata
 SUBMISSION.md
+
+# Agent Wallets (NEVER COMMIT)
+.wallets/
