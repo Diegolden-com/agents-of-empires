@@ -9,5 +9,6 @@ remappings = [
     "forge-std/=lib/forge-std/src/",
     "@evvm/testnet-contracts/=lib/Testnet-Contracts/src/"
 ]
+via_ir = true
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
