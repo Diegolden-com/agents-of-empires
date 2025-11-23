@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "./GameVRFConsumer.sol";
 
+// ADDRESS DEPLOYED: 0xCE21A1Ee76726Bb487684330BB216E5f233A47fb
 contract GameController {
     address public owner;
     GameVRFConsumer public vrf;
@@ -30,12 +31,12 @@ contract GameController {
     }
 
     enum Resource {
-        WOOD,        // Wood
-        SHEEP,       // Sheep
-        WHEAT,       // Wheat
-        BRICK,       // Brick
-        ORE,         // Ore
-        DESERT       // Desert (no produce)
+        WOOD,        // Wood 0 
+        SHEEP,       // Sheep 1
+        WHEAT,       // Wheat 2
+        BRICK,       // Brick 3
+        ORE,         // Ore 4
+        DESERT       // Desert (no produce) 5
     }
 
     uint256 constant TOTAL_COMPANIES = 5;

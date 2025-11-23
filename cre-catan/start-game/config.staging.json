@@ -1,0 +1,5 @@
+{
+  "schedule": "*/30 * * * * *",
+  "chainSelectorName": "ethereum-testnet-sepolia-base-1",
+  "gameControllerAddress": "0xCE21A1Ee76726Bb487684330BB216E5f233A47fb"  
+}

@@ -1,4 +1,10 @@
 {
+  "lib/Testnet-Contracts": {
+    "tag": {
+      "name": "v2.1.2",
+      "rev": "3dce3bb5915b6bee1390d9c25b73592ce79c2640"
+    }
+  },
   "lib/chainlink": {
     "tag": {
       "name": "v2.30.1",

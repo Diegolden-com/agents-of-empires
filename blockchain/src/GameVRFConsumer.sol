@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 
+// ADDRESS DEPLOYED: 0x5D6c49C6Fad9bC1D2320cd9579D31c60ae00647E
 interface IGameController {
     function receiveRandomWords(
         uint256 gameId,
