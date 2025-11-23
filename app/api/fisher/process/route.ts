@@ -119,6 +119,15 @@ export async function POST(request: Request) {
                     throw new Error(`Invalid agent address: ${move.agent}. ENS names are not supported.`);
                 }
 
+                // Validate signature length (must be 65 bytes = 132 chars including 0x)
+                if (move.signature.length !== 132) {
+                    throw new Error(
+                        `Invalid signature length for move ${move.id}: ${move.signature.length} chars. ` +
+                        `Expected 132 chars (0x + 130 hex for 65 bytes). ` +
+                        `This move was likely signed with an older version. Please regenerate it.`
+                    );
+                }
+
                 // Ensure all parameters are properly typed to prevent ENS resolution
                 const gameId = BigInt(move.game_id);
                 const agent = ethers.getAddress(move.agent); // Normalizes the address

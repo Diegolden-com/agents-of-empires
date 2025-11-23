@@ -84,7 +84,26 @@ export async function signMessageEIP191(
   message: string
 ): Promise<{ signature: string; messageHash: string }> {
   // ethers.js ya implementa EIP-191 en signMessage
-  const signature = await wallet.signMessage(message);
+  let signature = await wallet.signMessage(message);
+
+  // Validar que la firma tenga exactamente 65 bytes (130 caracteres hex + 0x)
+  // Formato: 0x + r (32 bytes) + s (32 bytes) + v (1 byte)
+  if (signature.length !== 132) {
+    throw new Error(
+      `Invalid signature length: ${signature.length}. Expected 132 characters (0x + 130 hex chars for 65 bytes). ` +
+      `Signature: ${signature}`
+    );
+  }
+
+  // Asegurar que el byte v sea 27 o 28 (no 0 o 1)
+  // ethers.js ya debería hacer esto, pero lo verificamos por seguridad
+  const v = parseInt(signature.slice(-2), 16);
+  if (v < 27) {
+    // Si v es 0 or 1, convertir a 27 or 28
+    const normalizedV = v + 27;
+    signature = signature.slice(0, -2) + normalizedV.toString(16).padStart(2, '0');
+    console.log(`⚠️ Normalized signature v from ${v} to ${normalizedV}`);
+  }
 
   // Calcular el hash del mensaje con el prefijo EIP-191
   const messageHash = ethers.hashMessage(message);
