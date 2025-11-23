@@ -16934,7 +16934,33 @@ function decodeTopic({ param, value: value2 }) {
 var zeroAddress = "0x0000000000000000000000000000000000000000";
 init_decodeFunctionResult();
 init_encodeFunctionData();
-var eventAbi = parseAbi(["event GameActivated(uint256 indexed gameId)"]);
+var BOARD_POSITIONS = [
+  "Row 1 - Position 1 (Top)",
+  "Row 1 - Position 2",
+  "Row 1 - Position 3",
+  "Row 2 - Position 1",
+  "Row 2 - Position 2",
+  "Row 2 - Position 3",
+  "Row 2 - Position 4",
+  "Row 3 - Position 1",
+  "Row 3 - Position 2",
+  "Row 3 - Position 3",
+  "Row 3 - Position 4",
+  "Row 3 - Position 5 (Center)",
+  "Row 4 - Position 1",
+  "Row 4 - Position 2",
+  "Row 4 - Position 3",
+  "Row 4 - Position 4",
+  "Row 5 - Position 1",
+  "Row 5 - Position 2",
+  "Row 5 - Position 3 (Bottom)"
+];
+var GAME_CONTROLLER_ABI = parseAbi([
+  "struct AIPlayer { uint8 company; uint8 modelIndex; uint8 playOrder; }",
+  "struct Hexagon { uint8 resource; }",
+  "struct Game { address bettor; uint256 deposit; uint8 status; bool randomReady; AIPlayer[4] aiPlayers; Hexagon[19] board; uint8 bettorChoice; uint256 requestId; uint256 startTime; uint256 endTime; uint8 winner; }",
+  "function getGame(uint256 gameId) view returns (Game)"
+]);
 var bigIntReplacer = (_key, value2) => {
   if (typeof value2 === "bigint") {
     return value2.toString();
@@ -16956,20 +16982,14 @@ var readGameFromBlockchain = async (runtime2, gameId) => {
       throw new Error(`Network ${runtime2.config.chainSelectorName} not found`);
     }
     const evmClient = new cre.capabilities.EVMClient(network248.chainSelector.selector);
-    const gameControllerAbi = parseAbi([
-      "struct AIPlayer { uint8 company; uint8 modelIndex; uint8 playOrder; }",
-      "struct Hexagon { uint8 resource; }",
-      "struct Game { address bettor; uint256 deposit; uint8 status; bool randomReady; AIPlayer[4] aiPlayers; Hexagon[19] board; uint8 bettorChoice; uint256 requestId; uint256 startTime; uint256 endTime; uint8 winner; }",
-      "function getGame(uint256 gameId) view returns (Game)"
-    ]);
     const callData = encodeFunctionData({
-      abi: gameControllerAbi,
+      abi: GAME_CONTROLLER_ABI,
       functionName: "getGame",
       args: [gameId]
     });
     runtime2.log("Call data:");
     runtime2.log(callData);
-    const contractCall = await evmClient.callContract(runtime2, {
+    const contractCall = evmClient.callContract(runtime2, {
       call: encodeCallMsg({
         from: zeroAddress,
         to: runtime2.config.gameControllerAddress,
@@ -16980,18 +17000,79 @@ var readGameFromBlockchain = async (runtime2, gameId) => {
     runtime2.log("Contract call result:");
     runtime2.log(JSON.stringify(contractCall, bigIntReplacer));
     const result = decodeFunctionResult({
-      abi: gameControllerAbi,
+      abi: GAME_CONTROLLER_ABI,
       functionName: "getGame",
       data: bytesToHex(contractCall.data)
     });
-    runtime2.log("Decoded result:");
-    runtime2.log(JSON.stringify(result, bigIntReplacer, 2));
-    return result;
+    const gamePayload = {
+      gameId: gameId.toString(),
+      bettor: result.bettor,
+      deposit: result.deposit.toString(),
+      status: result.status,
+      randomReady: result.randomReady,
+      bettorChoice: result.bettorChoice,
+      requestId: result.requestId.toString(),
+      startTime: result.startTime.toString(),
+      endTime: result.endTime.toString(),
+      winner: result.winner,
+      aiPlayers: result.aiPlayers.map((player, index) => ({
+        index,
+        company: player.company,
+        modelIndex: player.modelIndex,
+        playOrder: player.playOrder
+      })),
+      board: result.board.map((hexagon, index) => ({
+        index,
+        position: BOARD_POSITIONS[index],
+        resource: hexagon.resource
+      }))
+    };
+    logGameData(runtime2, gamePayload);
+    return gamePayload;
   } catch (error) {
     runtime2.log(`Error reading game from blockchain: ${error}`);
     throw error;
   }
 };
+var logGameData = (runtime2, gamePayload) => {
+  runtime2.log("=".repeat(50));
+  runtime2.log("COMPLETE GAME DATA:");
+  runtime2.log("=".repeat(50));
+  runtime2.log(`Game ID: ${gamePayload.gameId}`);
+  runtime2.log(`Bettor: ${gamePayload.bettor}`);
+  runtime2.log(`Deposit: ${gamePayload.deposit}`);
+  runtime2.log(`Status: ${gamePayload.status}`);
+  runtime2.log(`Random Ready: ${gamePayload.randomReady}`);
+  runtime2.log(`Bettor Choice: ${gamePayload.bettorChoice}`);
+  runtime2.log(`Request ID: ${gamePayload.requestId}`);
+  runtime2.log(`Start Time: ${gamePayload.startTime}`);
+  runtime2.log(`End Time: ${gamePayload.endTime}`);
+  runtime2.log(`Winner: ${gamePayload.winner}`);
+  runtime2.log(`
+` + "-".repeat(50));
+  runtime2.log("AI PLAYERS:");
+  runtime2.log("-".repeat(50));
+  gamePayload.aiPlayers.forEach((player) => {
+    runtime2.log(`Player ${player.index}:`);
+    runtime2.log(`  Company: ${player.company}`);
+    runtime2.log(`  Model Index: ${player.modelIndex}`);
+    runtime2.log(`  Play Order: ${player.playOrder}`);
+  });
+  runtime2.log(`
+` + "-".repeat(50));
+  runtime2.log("BOARD (19 Hexagons):");
+  runtime2.log("-".repeat(50));
+  gamePayload.board.forEach((hexagon) => {
+    runtime2.log(`[${hexagon.index}] ${hexagon.position} - Resource: ${hexagon.resource}`);
+  });
+  runtime2.log(`
+` + "=".repeat(50));
+  runtime2.log("JSON PAYLOAD FOR API:");
+  runtime2.log("=".repeat(50));
+  runtime2.log(JSON.stringify(gamePayload, null, 2));
+  runtime2.log("=".repeat(50));
+};
+var eventAbi = parseAbi(["event GameActivated(uint256 indexed gameId)"]);
 var onLogTrigger = async (runtime2, log) => {
   runtime2.log(`Log detected from ${log.address}`);
   try {
@@ -17007,7 +17088,8 @@ var onLogTrigger = async (runtime2, log) => {
       const { gameId } = decodedLog.args;
       runtime2.log(`GameActivated Event Detected!`);
       runtime2.log(`  Game ID: ${gameId.toString()}`);
-      const gameData = await readGameFromBlockchain(runtime2, gameId);
+      const gamePayload = await readGameFromBlockchain(runtime2, gameId);
+      runtime2.log(`✓ Game ${gamePayload.gameId} data ready for API`);
       return `Game ${gameId.toString()} activated successfully`;
     }
   } catch (error) {
