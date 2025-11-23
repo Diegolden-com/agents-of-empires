@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { GameMoveInsert } from '@/interface/GameMoves';
+import { getNextNonce } from './nonceManager.service';
 
 /**
  * Servicio para firmar transacciones de agentes usando EIP-191
@@ -147,11 +148,11 @@ export async function signAgentMove(
 }
 
 /**
- * Genera un nonce único para un agente
- * Por ahora usamos timestamp + random, pero esto debería venir de la blockchain
+ * Genera un nonce único e incremental para un agente
+ * IMPORTANTE: El nonce es incremental por agente y no se puede repetir
  */
-export function generateNonce(): number {
-  return Math.floor(Date.now() / 1000) + Math.floor(Math.random() * 1000);
+export function generateNonce(agentAddress: string): number {
+  return getNextNonce(agentAddress);
 }
 
 /**

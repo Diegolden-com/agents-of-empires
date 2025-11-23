@@ -61,8 +61,8 @@ export class GameActionIntegratorService {
       console.log(`   Move Type: ${moveType}`);
       console.log(`   Encoded Data: ${encodedData}`);
 
-      // 3. Generar nonce único
-      const nonce = generateNonce();
+      // 3. Generar nonce único e incremental para este agente
+      const nonce = generateNonce(agentAddress);
 
       // 4. Preparar datos para firmar
       const moveData: MoveData = {

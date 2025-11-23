@@ -100,7 +100,7 @@ export class GamesService {
     }
 
     await this.updateGame(gameId, {
-      total_moves: game.total_moves + 1
+      total_moves: (game.total_moves ?? 0) + 1
     });
   }
 
@@ -133,7 +133,7 @@ export class GamesService {
   /**
    * Lista juegos por estado
    */
-  async listGamesByStatus(status: 'active' | 'finished' | 'cancelled'): Promise<Game[]> {
+  async listGamesByStatus(status: 'ready' | 'active' | 'finished' | 'cancelled'): Promise<Game[]> {
     const { data, error } = await this.supabase
       .from("games")
       .select("*")
