@@ -31,12 +31,12 @@ contract GameController {
     }
 
     enum Resource {
-        WOOD,        // Wood
-        SHEEP,       // Sheep
-        WHEAT,       // Wheat
-        BRICK,       // Brick
-        ORE,         // Ore
-        DESERT       // Desert (no produce)
+        WOOD,        // Wood 0 
+        SHEEP,       // Sheep 1
+        WHEAT,       // Wheat 2
+        BRICK,       // Brick 3
+        ORE,         // Ore 4
+        DESERT       // Desert (no produce) 5
     }
 
     uint256 constant TOTAL_COMPANIES = 5;
