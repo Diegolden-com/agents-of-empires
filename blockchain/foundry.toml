@@ -1,9 +1,10 @@
 [profile.default]
 src = "src"
 out = "out"
-libs = ["lib"]
-
+libs = ["lib", "node_modules"]
 remappings = [
+    "@evvm/testnet-contracts/=node_modules/@evvm/testnet-contracts/",
+    "@chainlink/=node_modules/@chainlink/",
     "@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",
     "@evvm/testnet-contracts/=lib/Testnet-Contracts/src/"
