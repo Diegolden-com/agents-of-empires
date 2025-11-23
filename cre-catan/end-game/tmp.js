@@ -7312,6 +7312,15 @@ var LATEST_BLOCK_NUMBER = {
   absVal: Buffer.from([2]).toString("base64"),
   sign: "-1"
 };
+function ok(responseOrFn) {
+  if (typeof responseOrFn === "function") {
+    return {
+      result: () => ok(responseOrFn().result)
+    };
+  } else {
+    return responseOrFn.statusCode >= 200 && responseOrFn.statusCode < 300;
+  }
+}
 function sendReport(runtime, report, fn) {
   const rawReport = report.x_generatedCodeOnly_unwrap();
   const request = fn(rawReport);
@@ -15766,6 +15775,29 @@ var endGameOnchain = (runtime2) => {
   }
   throw new Error(`Transaction failed with status: ${writeResult.txStatus}`);
 };
+var httpRequest = (gamePayload, apiUrl) => {
+  return (sendRequester, config) => {
+    const bodyBytes = new TextEncoder().encode(JSON.stringify(gamePayload));
+    const body = Buffer.from(bodyBytes).toString("base64");
+    const req = {
+      url: apiUrl,
+      method: "POST",
+      body,
+      headers: {
+        "Content-Type": "application/json"
+      },
+      cacheSettings: {
+        readFromCache: true,
+        maxAgeMs: 60000
+      }
+    };
+    const response = sendRequester.sendRequest(req).result();
+    if (!ok(response)) {
+      throw new Error(`Failed to send request: ${response.statusCode}`);
+    }
+    return { statusCode: response.statusCode };
+  };
+};
 var initWorkflow = (config) => {
   return [
     cre.handler(new cre.capabilities.CronCapability().trigger({
@@ -15779,5 +15811,6 @@ async function main() {
 }
 main();
 export {
-  main
+  main,
+  httpRequest
 };
