@@ -4,11 +4,6 @@ pragma solidity ^0.8.20;
 import "./IBoard.sol";
 
 library BoardUtils {
-    // Board Topology Constants
-    uint8 public constant MAX_HEXAGONS = 19;
-    uint8 public constant MAX_VERTICES = 54;
-    uint8 public constant MAX_EDGES = 72;
-
     // Auto-generated topology
 
     function getHexagonVertices(uint8 hexId) internal pure returns (uint8[6] memory) {

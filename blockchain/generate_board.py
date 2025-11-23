@@ -203,7 +203,7 @@ for e in range(num_edges):
                 edge_neighbors[e].add(other_e)
 
 # Output Solidity Code
-with open("src/BoardUtils.sol", "w") as f:
+with open("blockchain/src/BoardUtils.sol", "w") as f:
     f.write("// SPDX-License-Identifier: MIT\n")
     f.write("pragma solidity ^0.8.20;\n\n")
     f.write("import \"./IBoard.sol\";\n\n")
@@ -255,3 +255,49 @@ with open("src/BoardUtils.sol", "w") as f:
     f.write("        return [0,0];\n")
     f.write("    }\n")
     f.write("}\n")
+
+# Output TypeScript Code
+with open("lib/board-utils.ts", "w") as f:
+    f.write("// Ported from blockchain/src/BoardUtils.sol\n\n")
+    f.write("export const BoardUtils = {\n")
+    
+    # getHexagonVertices
+    f.write("    getHexagonVertices(hexId: number): number[] {\n")
+    f.write("        if (hexId === 0) return " + str(hex_vertices[0]) + ";\n")
+    for i in range(1, 19):
+        f.write(f"        if (hexId === {i}) return {hex_vertices[i]};\n")
+    f.write("        return [0, 0, 0, 0, 0, 0];\n")
+    f.write("    },\n\n")
+
+    # getHexagonEdges
+    f.write("    getHexagonEdges(hexId: number): number[] {\n")
+    f.write("        if (hexId === 0) return " + str(hex_edges[0]) + ";\n")
+    for i in range(1, 19):
+        f.write(f"        if (hexId === {i}) return {hex_edges[i]};\n")
+    f.write("        return [0, 0, 0, 0, 0, 0];\n")
+    f.write("    },\n\n")
+
+    # getAdjacentVertices
+    f.write("    getAdjacentVertices(vertexId: number): number[] {\n")
+    f.write("        if (vertexId === 0) return " + str(list(vertex_neighbors[0])) + ";\n")
+    for i in range(1, num_vertices):
+        f.write(f"        if (vertexId === {i}) return {list(vertex_neighbors[i])};\n")
+    f.write("        return [];\n")
+    f.write("    },\n\n")
+
+    # getAdjacentEdges
+    f.write("    getAdjacentEdges(edgeId: number): number[] {\n")
+    f.write("        if (edgeId === 0) return " + str(list(edge_neighbors[0])) + ";\n")
+    for i in range(1, num_edges):
+        f.write(f"        if (edgeId === {i}) return {list(edge_neighbors[i])};\n")
+    f.write("        return [];\n")
+    f.write("    },\n\n")
+
+    # getVertexEdges
+    f.write("    getVertexEdges(vertexId: number): number[] {\n")
+    f.write("        if (vertexId === 0) return " + str(list(vertex_edges_map[0])) + ";\n")
+    for i in range(1, num_vertices):
+        f.write(f"        if (vertexId === {i}) return {list(vertex_edges_map[i])};\n")
+    f.write("        return [];\n")
+    f.write("    }\n")
+    f.write("};\n")
