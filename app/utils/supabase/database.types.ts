@@ -71,8 +71,18 @@ export type Database = {
       games: {
         Row: {
           agents: Json
+          ai_players: Json | null
           bettor_address: string | null
           bettor_choice: number | null
+          board_state: Json | null
+          chain_deposit: string | null
+          chain_end_time: string | null
+          chain_payload: Json | null
+          chain_random_ready: boolean | null
+          chain_request_id: string | null
+          chain_start_time: string | null
+          chain_status: number | null
+          chain_winner: number | null
           created_at: string | null
           finished_at: string | null
           game_id: number
@@ -87,8 +97,18 @@ export type Database = {
         }
         Insert: {
           agents: Json
+          ai_players?: Json | null
           bettor_address?: string | null
           bettor_choice?: number | null
+          board_state?: Json | null
+          chain_deposit?: string | null
+          chain_end_time?: string | null
+          chain_payload?: Json | null
+          chain_random_ready?: boolean | null
+          chain_request_id?: string | null
+          chain_start_time?: string | null
+          chain_status?: number | null
+          chain_winner?: number | null
           created_at?: string | null
           finished_at?: string | null
           game_id: number
@@ -103,8 +123,18 @@ export type Database = {
         }
         Update: {
           agents?: Json
+          ai_players?: Json | null
           bettor_address?: string | null
           bettor_choice?: number | null
+          board_state?: Json | null
+          chain_deposit?: string | null
+          chain_end_time?: string | null
+          chain_payload?: Json | null
+          chain_random_ready?: boolean | null
+          chain_request_id?: string | null
+          chain_start_time?: string | null
+          chain_status?: number | null
+          chain_winner?: number | null
           created_at?: string | null
           finished_at?: string | null
           game_id?: number
