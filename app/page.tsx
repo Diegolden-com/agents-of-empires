@@ -53,6 +53,7 @@ export default function AIBattlePage() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [showEventDetails, setShowEventDetails] = useState(true);
   const [showLLMConfig, setShowLLMConfig] = useState(false);
+  const [blockchainGameId, setBlockchainGameId] = useState<string>('1'); // GameID desde blockchain
 
   function toggleAgent(agentId: string) {
     if (selectedAgents.includes(agentId)) {
@@ -106,11 +107,12 @@ export default function AIBattlePage() {
     setGameState(null);
 
     try {
-      // ✨ Enviar configuraciones personalizadas de LLM
+      // ✨ Enviar configuraciones personalizadas de LLM y gameId de blockchain
       const response = await fetch('/api/game/play-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
+          gameId: parseInt(blockchainGameId), // ID del juego en blockchain
           agentIds: selectedAgents,
           llmConfigs: agentLLMConfigs, // ✨ Configuraciones personalizadas
         }),
@@ -205,12 +207,32 @@ export default function AIBattlePage() {
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Select Agents (2-4)</CardTitle>
+                  <CardTitle>Game Configuration</CardTitle>
                   <CardDescription>
-                    Choose which AI personalities will compete
+                    Configure blockchain game ID and select agents
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-4">
+                  {/* Blockchain Game ID Input */}
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <label className="block text-sm font-semibold text-blue-900 mb-2">
+                      🔗 Blockchain Game ID
+                    </label>
+                    <input
+                      type="number"
+                      value={blockchainGameId}
+                      onChange={(e) => setBlockchainGameId(e.target.value)}
+                      placeholder="Enter blockchain game ID"
+                      className="w-full p-2 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="1"
+                    />
+                    <p className="text-xs text-blue-600 mt-1">
+                      Este ID debe coincidir con el juego creado en la blockchain
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold mb-2">Select Agents (2-4)</h3>
                   {CATAN_AGENTS.map((agent) => (
                     <Card
                       key={agent.id}
@@ -242,6 +264,7 @@ export default function AIBattlePage() {
                       </CardHeader>
                     </Card>
                   ))}
+                  </div>
                 </CardContent>
               </Card>
 
@@ -317,13 +340,18 @@ export default function AIBattlePage() {
 
               <Button
                 onClick={startBattle}
-                disabled={selectedAgents.length < 2}
+                disabled={selectedAgents.length < 2 || !blockchainGameId}
                 size="lg"
                 className="w-full"
               >
                 <Play className="mr-2" />
                 Start Battle ({selectedAgents.length} agents selected)
               </Button>
+              {!blockchainGameId && (
+                <p className="text-xs text-red-500 text-center">
+                  ⚠️ Debes ingresar un Game ID de blockchain
+                </p>
+              )}
             </div>
 
             {/* Agent Details & LLM Configuration */}

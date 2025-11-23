@@ -131,7 +131,7 @@ export class GameActionIntegratorService {
       await this.gamesService.createGame({
         game_id: gameId,
         status: 'active',
-        agents,
+        agents: agents as any, // Cast to Json type for Supabase
         bettor_address: bettorAddress,
         bettor_choice: bettorChoice,
         total_turns: 0,

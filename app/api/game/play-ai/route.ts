@@ -5,6 +5,7 @@ import { getAgentById } from '@/lib/agent-configs';
 import { getAgentDecision, AgentDecision } from '@/lib/agent-decision';
 import { getGameStateForAgent, executeAgentAction } from '@/lib/agent-interface';
 import { GameState } from '@/lib/types';
+import { getGameActionIntegrator } from '@/services/gameActionIntegrator.service';
 
 export const maxDuration = 300; // 5 minutes for long games
 
@@ -66,7 +67,18 @@ export async function POST(req: NextRequest) {
       try {
         // Read agent selections from request body
         const body = await req.json();
-        const { agentIds, llmConfigs } = body as { agentIds: string[]; llmConfigs?: Record<string, any> };
+        const { gameId: blockchainGameId, agentIds, llmConfigs } = body as {
+          gameId?: number;
+          agentIds: string[];
+          llmConfigs?: Record<string, any>;
+        };
+
+        // Validate blockchain gameId
+        if (!blockchainGameId || typeof blockchainGameId !== 'number') {
+          send({ type: 'error', message: 'Blockchain gameId (number) is required' });
+          controller.close();
+          return;
+        }
 
         if (!agentIds || agentIds.length < 2 || agentIds.length > 4) {
           send({ type: 'error', message: 'Need 2-4 agent IDs' });
@@ -96,17 +108,30 @@ export async function POST(req: NextRequest) {
         }
 
         console.log('🎲 Catan AI Game starting:', agentConfigs.map(a => a!.name).join(' vs '));
-        
+        console.log(`🔗 Blockchain Game ID: ${blockchainGameId}`);
+
         // ✨ Log LLM configurations
         agentConfigs.forEach(agent => {
           console.log(`  - ${agent!.name}: ${agent!.llmConfig.provider}/${agent!.llmConfig.model} (temp: ${agent!.llmConfig.temperature})`);
         });
 
+        // ✨ Initialize game integrator for blockchain signing and DB storage
+        const integrator = getGameActionIntegrator();
+
+        // Initialize game in Supabase
+        try {
+          await integrator.initializeGame(blockchainGameId, agentIds);
+          console.log(`✅ Game ${blockchainGameId} initialized in Supabase`);
+        } catch (dbError) {
+          console.error('⚠️ Error initializing game in Supabase:', dbError);
+          // Continue game even if DB initialization fails
+        }
+
         // Create game
         const playerNames = agentConfigs.map(a => a!.name);
         const gameState = createGame(playerNames);
         const gameId = createGameSession(gameState);
-        
+
         console.log(`🎮 Game created with ID: ${gameId}`);
 
         send({ 
@@ -266,6 +291,22 @@ export async function POST(req: NextRequest) {
             }
           } else {
             consecutiveFailures = 0; // Reset on success
+
+            // ✨ Save action to Supabase (sign and store)
+            try {
+              await integrator.processAndSaveAction(
+                blockchainGameId,
+                agentIds[gameState.currentPlayerIndex],
+                {
+                  type: decision.action,
+                  data: decision.data
+                }
+              );
+              console.log(`✅ Action saved to database for ${agentIds[gameState.currentPlayerIndex]}`);
+            } catch (dbError) {
+              console.error('⚠️ Error saving action to database:', dbError);
+              // Continue game even if DB save fails
+            }
           }
 
           // Update game store after action
@@ -284,8 +325,23 @@ export async function POST(req: NextRequest) {
           const winner = gameState.players.find(p => p.victoryPoints >= 10);
           if (winner) {
             const winnerAgent = agentConfigs[gameState.players.indexOf(winner)];
-            send({ 
-              type: 'victory', 
+            const winnerIndex = gameState.players.indexOf(winner);
+
+            // ✨ Save game result to Supabase
+            try {
+              await integrator.finishGame(
+                blockchainGameId,
+                agentIds[winnerIndex],
+                winnerIndex,
+                gameState.turn
+              );
+              console.log(`🏆 Game ${blockchainGameId} finished in database. Winner: ${agentIds[winnerIndex]}`);
+            } catch (dbError) {
+              console.error('⚠️ Error finishing game in database:', dbError);
+            }
+
+            send({
+              type: 'victory',
               winner: {
                 id: winner.id,
                 name: winner.name,
@@ -303,12 +359,26 @@ export async function POST(req: NextRequest) {
 
         // Game ended without a winner reaching 10 VP
         const realWinner = gameState.players.find(p => p.victoryPoints >= 10);
-        
+
         if (realWinner) {
           // Someone actually won with 10 VP
           const winnerAgent = agentConfigs[gameState.players.indexOf(realWinner)];
-          send({ 
-            type: 'victory', 
+          const winnerIndex = gameState.players.indexOf(realWinner);
+
+          // ✨ Save game result
+          try {
+            await integrator.finishGame(
+              blockchainGameId,
+              agentIds[winnerIndex],
+              winnerIndex,
+              gameState.turn
+            );
+          } catch (dbError) {
+            console.error('⚠️ Error finishing game:', dbError);
+          }
+
+          send({
+            type: 'victory',
             winner: {
               id: realWinner.id,
               name: realWinner.name,
@@ -320,15 +390,29 @@ export async function POST(req: NextRequest) {
           });
         } else if (turnCount >= maxTurns) {
           // Max turns reached without winner - declare winner by VP only if they have reasonable points
-          const leader = gameState.players.reduce((prev, current) => 
+          const leader = gameState.players.reduce((prev, current) =>
             current.victoryPoints > prev.victoryPoints ? current : prev
           );
-          
+
           if (leader.victoryPoints >= 5) {
             // Only declare winner if they have at least 5 VP (reasonable progress)
             const winnerAgent = agentConfigs[gameState.players.indexOf(leader)];
-            send({ 
-              type: 'victory', 
+            const winnerIndex = gameState.players.indexOf(leader);
+
+            // ✨ Save game result
+            try {
+              await integrator.finishGame(
+                blockchainGameId,
+                agentIds[winnerIndex],
+                winnerIndex,
+                gameState.turn
+              );
+            } catch (dbError) {
+              console.error('⚠️ Error finishing game:', dbError);
+            }
+
+            send({
+              type: 'victory',
               winner: {
                 id: leader.id,
                 name: leader.name,

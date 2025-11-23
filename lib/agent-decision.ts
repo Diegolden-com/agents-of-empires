@@ -1,7 +1,4 @@
-import { openai } from '@ai-sdk/openai';
-import { anthropic } from '@ai-sdk/anthropic';
-import { google } from '@ai-sdk/google';
-import { mistral } from '@ai-sdk/mistral';
+import { openai, createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import { z } from 'zod';
 import { AgentConfig, LLMConfig } from './agent-configs';
@@ -9,21 +6,50 @@ import { GameState, ResourceType } from './types';
 import { rankVertices, rankEdges, formatVertexOptions, formatEdgeOptions } from './position-ranker';
 import { saveOptionMap } from './option-mapper';
 
+// ✨ Vercel AI SDK Gateway configuration
+const vercelGateway = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY, // Vercel AI SDK usa OpenAI key como gateway
+  compatibility: 'strict',
+});
+
+// ✨ Map provider/model to Vercel AI SDK format
+function mapToVercelModel(provider: string, model: string): string {
+  // Vercel AI SDK gateway acepta modelos en formato: provider/model
+  const mapping: Record<string, string> = {
+    // OpenAI
+    'openai/gpt-4o': 'gpt-4o',
+    'openai/gpt-4o-mini': 'gpt-4o-mini',
+    'openai/gpt-4-turbo': 'gpt-4-turbo',
+    'openai/gpt-3.5-turbo': 'gpt-3.5-turbo',
+
+    // Anthropic (via gateway)
+    'anthropic/claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-20241022',
+    'anthropic/claude-3-5-haiku-20241022': 'claude-3-5-haiku-20241022',
+
+    // Google (via gateway)
+    'google/gemini-1.5-pro': 'gemini-1.5-pro',
+    'google/gemini-1.5-flash': 'gemini-1.5-flash',
+
+    // Mistral (via gateway)
+    'mistral/mistral-large-latest': 'mistral-large-latest',
+    'mistral/mistral-small-latest': 'mistral-small-latest',
+  };
+
+  const key = `${provider}/${model}`;
+  return mapping[key] || model;
+}
+
 // ✨ Función para obtener el modelo de IA según la configuración
 function getModelFromConfig(config: LLMConfig) {
-  switch (config.provider) {
-    case 'openai':
-      return openai(config.model);
-    case 'anthropic':
-      return anthropic(config.model);
-    case 'google':
-      return google(config.model);
-    case 'mistral':
-      return mistral(config.model);
-    default:
-      console.warn(`Unknown provider: ${config.provider}, falling back to OpenAI`);
-      return openai('gpt-4o-mini');
+  const modelName = mapToVercelModel(config.provider, config.model);
+
+  // Todos los modelos usan el gateway de OpenAI/Vercel
+  if (config.provider === 'openai') {
+    return openai(modelName);
   }
+
+  // Para otros providers, usar el gateway que simula OpenAI
+  return vercelGateway(modelName);
 }
 
 export const agentDecisionSchema = z.object({
