@@ -118,24 +118,25 @@ npm run start:agents
 Por favor abre un issue primero para discutir lo que te gustaría cambiar.
 
 ## 📒 Deployment Addressbook
-**Admin:** `0x5ee75a1B1648C023e885E58bD3735Ae273f2cc52`  
-**GoldenFisher:** `0x5ee75a1B1648C023e885E58bD3735Ae273f2cc52`  
-**Activator:** `0x5ee75a1B1648C023e885E58bD3735Ae273f2cc52`  
+**Admin:** `0xb322E239E5A32724633A595b8f8657F9cbb307B2`
+**GoldenFisher:** `0xb322E239E5A32724633A595b8f8657F9cbb307B2`
+**Activator:** `0xb322E239E5A32724633A595b8f8657F9cbb307B2`
 
-**EvvmName:** `CATANVVM`  
-**PrincipalTokenName:** `Mate token`  
-**PrincipalTokenSymbol:** `MATE`  
+**EvvmName:** `CATANEVVM`
+**PrincipalTokenName:** `Mate token`
+**PrincipalTokenSymbol:** `MATE`
 
-**TotalSupply:** `96`  
-**EraTokens:** `32`  
-**Reward:** `1016666666500000000000000000`  
+**TotalSupply:** `96`
+**EraTokens:** `32`
+**Reward:** `1016666666500000000000000000`
 
-**Staking deployed at:** `0xbbEC0ca584C1d7c0Cbdc355D6e0531b28fF0e2a8`  
-**Evvm deployed at:** `0xae6D696c24e3D074793409bC28b446E0426B0e62`  
-**Estimator deployed at:** `0xC36011153233847cb8f2832825eFd66BA9662146`  
-**NameService deployed at:** `0x75F81a5D17b54126b5601F539Dc9225cEeDc8728`  
-**Treasury deployed at:** `0x52d8cb866b1f39CB50c9aD644D34cCFbA36D69B4`  
-**P2PSwap deployed at:** `0x2F2DD8E5487dBAa1302450aeC92D68f887a0BdA6`
+**Staking deployed at:** `0x524284Fa4B0B29eD6A27300549a3Dcb45F4de3a3`
+**Evvm deployed at:** `0x07a95C4a774DE93ff3fd8862EE2c8daCad5003A9`
+**Estimator deployed at:** `0x5298281736e2Ea94439e85664EAA6caC49aAF7c5`
+**NameService deployed at:** `0x0A7102D70D7C1b195771673C06b3341B46eebC43`
+**Treasury deployed at:** `0xd008a869aC24678C69C9C33f6bb67d001D8c802b`
+**P2PSwap deployed at:** `0xda771F6e91f17635091d760185fbEE85107e1fEE`
+**GameMoveService deployed at:** `0x1b613E12cf25063DBEd76f06280B80B7c70f4382`
 
 -----
 

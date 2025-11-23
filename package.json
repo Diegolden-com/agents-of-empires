@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "play": "tsx scripts/terminal-game.ts",
-    "test-agent": "tsx scripts/test-agent.ts"
+    "test-agent": "tsx scripts/test-agent.ts",
+    "types:generate": "supabase gen types typescript --project-id rsnwbumtrggklqsfnuju > app/utils/supabase/database.types.ts"
   },
   "keywords": [
     "catan",
