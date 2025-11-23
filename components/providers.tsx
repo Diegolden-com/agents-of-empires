@@ -13,7 +13,9 @@ export default function Providers({children, appId}: {children: React.ReactNode,
           showWalletLoginFirst: true,
         },
         embeddedWallets: {
-          createOnLogin: 'users-without-wallets',
+          ethereum: {
+            createOnLogin: 'users-without-wallets',
+          },
         },
         // Solo EVM chains, sin Solana
         supportedChains: [
