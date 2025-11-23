@@ -1,0 +1,13 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib", "node_modules"]
+remappings = [
+    "@evvm/testnet-contracts/=node_modules/@evvm/testnet-contracts/",
+    "@chainlink/=node_modules/@chainlink/",
+    "@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/",
+    "forge-std/=node_modules/forge-std/",
+    "ds-test/=node_modules/ds-test/src/",
+]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

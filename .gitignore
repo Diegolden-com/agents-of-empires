@@ -1,17 +1,30 @@
 # Dependencies
 node_modules/
 dist/
+/.pnp
+.pnp.js
 
 # Next.js
 .next/
+/.next/
 out/
+/out/
+
+# Production
 build/
+/build
+/dist
 
 # Environment
 .env
 .env.local
+.env*.local
 .env.production.local
 .env.development.local
+
+# Testing
+/coverage
+coverage/
 
 # Logs
 *.log
@@ -26,10 +39,18 @@ yarn-error.log*
 # Debug
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Testing
-coverage/
-
-# Production
+# Vercel
 .vercel
 
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Foundry dependencies
+blockchain/lib/
+blockchain/cache
+blockchain/out
