@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { CdpClient } from "@coinbase/cdp-sdk";
 
 // Define types for the context
 interface CDPContextType {
